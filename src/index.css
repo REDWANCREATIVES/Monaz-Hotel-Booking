@@ -1,0 +1,143 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Playfair Display", "Cormorant Garamond", Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  /* MONAZ HOTEL Luxury Palette: Brown, Orange & White */
+  --color-hotel-brown: #2A1810;
+  --color-hotel-brown-dark: #1E100A;
+  --color-hotel-brown-light: #422518;
+  --color-hotel-brown-muted: #6E4733;
+
+  --color-hotel-orange: #EA580C;
+  --color-hotel-orange-dark: #C2410C;
+  --color-hotel-orange-light: #F97316;
+  --color-hotel-orange-subtle: #FFF7ED;
+
+  /* Backward compatibility aliased to new Brown & Orange */
+  --color-forest: #2A1810;
+  --color-forest-dark: #1E100A;
+  --color-forest-light: #422518;
+  --color-ochre: #EA580C;
+  --color-ochre-light: #FFF7ED;
+  --color-ochre-dark: #C2410C;
+  --color-cream: #FAF6F0;
+  --color-cream-dark: #F2E9DE;
+  
+  --animate-fade-in-up: fade-in-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Custom scrollbar matching Monaz Hotel warm brown & orange accents */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-track {
+  background: #FAF6F0;
+}
+::-webkit-scrollbar-thumb {
+  background: #EA580C;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #2A1810;
+}
+
+body {
+  background-color: #FAF6F0;
+  color: #2A1810;
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+}
+
+/* Glassmorphism Classes for Apple-Glass Buttons & Panels in Warm Brown & Orange */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(234, 88, 12, 0.15);
+}
+
+.glass-panel-dark {
+  background: rgba(42, 24, 16, 0.88);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(234, 88, 12, 0.25);
+}
+
+.glass-button {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(234, 88, 12, 0.25);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-button:hover {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(234, 88, 12, 0.6);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px -5px rgba(234, 88, 12, 0.15);
+}
+
+/* Float keyframe animation for food plates & decorative cards */
+@keyframes float-gentle {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(1deg);
+  }
+}
+
+@keyframes float-leaf-1 {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
+  50% {
+    transform: translateY(-14px) rotate(10deg) scale(1.04);
+  }
+}
+
+@keyframes float-leaf-2 {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
+  50% {
+    transform: translateY(12px) rotate(-12deg) scale(0.96);
+  }
+}
+
+.animate-float-gentle {
+  animation: float-gentle 5s ease-in-out infinite;
+}
+
+.animate-float-leaf-1 {
+  animation: float-leaf-1 7s ease-in-out infinite;
+}
+
+.animate-float-leaf-2 {
+  animation: float-leaf-2 6.5s ease-in-out infinite;
+}
+
+.ambient-glow-orange {
+  background: radial-gradient(circle, rgba(234, 88, 12, 0.16) 0%, rgba(255, 255, 255, 0) 70%);
+}
+
+.ambient-glow-brown {
+  background: radial-gradient(circle, rgba(42, 24, 16, 0.08) 0%, rgba(255, 255, 255, 0) 70%);
+}

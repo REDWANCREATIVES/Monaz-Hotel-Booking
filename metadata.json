@@ -1,0 +1,6 @@
+{
+  "name": "Raha Coffee",
+  "description": "MONAZ HOTEL & Café located in Betel, Addis Ababa, Ethiopia. Premier accommodations, authentic Ethiopian dining, burgers, and specialty drinks.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

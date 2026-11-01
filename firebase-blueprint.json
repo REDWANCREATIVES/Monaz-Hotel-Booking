@@ -1,0 +1,105 @@
+{
+  "entities": {
+    "RoomBooking": {
+      "description": "Hotel room reservations made by guests",
+      "fields": {
+        "id": { "type": "string", "description": "Unique booking reference ID (e.g. BK-1234)" },
+        "roomId": { "type": "string", "description": "Room identifier (e.g. presidential-suite)" },
+        "roomName": { "type": "string", "description": "Full name of the booked room" },
+        "guestName": { "type": "string", "description": "Full name of the guest" },
+        "guestEmail": { "type": "string", "description": "Contact email of guest" },
+        "guestPhone": { "type": "string", "description": "Contact phone number of guest" },
+        "checkInDate": { "type": "string", "description": "Check-in date (YYYY-MM-DD)" },
+        "checkOutDate": { "type": "string", "description": "Check-out date (YYYY-MM-DD)" },
+        "nights": { "type": "number", "description": "Number of booked nights" },
+        "guestsCount": { "type": "number", "description": "Number of guests staying" },
+        "specialRequests": { "type": "string", "description": "Special requests or notes from guest" },
+        "totalPrice": { "type": "number", "description": "Calculated total price in ETB" },
+        "currency": { "type": "string", "description": "Currency code, defaults to ETB" },
+        "status": { "type": "string", "description": "pending, confirmed, rejected, checked-in, completed, cancelled" },
+        "paymentStatus": { "type": "string", "description": "unpaid, proof_submitted, verified, rejected, refunded" },
+        "paymentProof": { "type": "object", "description": "Payment proof details with fileUrl, fileName, fileSize, mimeType, and verification audit" },
+        "notificationStatus": { "type": "string", "description": "Notification delivery state: sent, pending, failed" },
+        "notificationRecipient": { "type": "string", "description": "Admin notification email address" },
+        "notificationError": { "type": "string", "description": "Optional error string if notification failed" },
+        "createdAt": { "type": "string", "description": "ISO timestamp of booking submission" }
+      }
+    },
+    "CafeOrder": {
+      "description": "Food and beverage restaurant and room service orders",
+      "fields": {
+        "id": { "type": "string", "description": "Unique order reference ID (e.g. ORD-123)" },
+        "customerName": { "type": "string", "description": "Name of customer placing order" },
+        "customerEmail": { "type": "string", "description": "Customer contact email" },
+        "customerPhone": { "type": "string", "description": "Customer contact phone" },
+        "deliveryType": { "type": "string", "description": "room_delivery, table_service, or takeaway" },
+        "roomOrTableNumber": { "type": "string", "description": "Room or table location" },
+        "items": { "type": "array", "description": "Ordered food and drinks with quantities and item prices" },
+        "subtotal": { "type": "number", "description": "Calculated subtotal in ETB" },
+        "serviceFee": { "type": "number", "description": "Service fee in ETB" },
+        "totalAmount": { "type": "number", "description": "Final total amount in ETB" },
+        "notes": { "type": "string", "description": "Customer special culinary or delivery instructions" },
+        "status": { "type": "string", "description": "pending, accepted, preparing, ready, completed, cancelled" },
+        "notificationStatus": { "type": "string", "description": "Notification delivery state: sent, pending, failed" },
+        "notificationRecipient": { "type": "string", "description": "Admin notification email address" },
+        "notificationError": { "type": "string", "description": "Optional error string if notification failed" },
+        "createdAt": { "type": "string", "description": "ISO timestamp of order creation" }
+      }
+    },
+    "TableReservation": {
+      "description": "Table dining reservations and VIP banquet catering inquiries",
+      "fields": {
+        "id": { "type": "string", "description": "Unique reservation reference ID" },
+        "bookingType": { "type": "string", "description": "reservation or catering" },
+        "name": { "type": "string", "description": "Guest name" },
+        "email": { "type": "string", "description": "Guest email" },
+        "phone": { "type": "string", "description": "Guest phone number" },
+        "date": { "type": "string", "description": "Reservation date (YYYY-MM-DD)" },
+        "time": { "type": "string", "description": "Reservation time" },
+        "guests": { "type": "string", "description": "Number of guests" },
+        "package": { "type": "string", "description": "Selected dining package" },
+        "notes": { "type": "string", "description": "Special table requests" },
+        "status": { "type": "string", "description": "pending, confirmed, completed, cancelled" },
+        "notificationStatus": { "type": "string", "description": "Notification delivery state: sent, pending, failed" },
+        "notificationRecipient": { "type": "string", "description": "Admin notification email address" },
+        "createdAt": { "type": "string", "description": "ISO timestamp" }
+      }
+    },
+    "AdminNotification": {
+      "description": "Audit outbox of notifications dispatched to the hotel administrator",
+      "fields": {
+        "id": { "type": "string", "description": "Notification unique log ID" },
+        "eventType": { "type": "string", "description": "room_booking, cafe_order, table_reservation" },
+        "recordId": { "type": "string", "description": "ID of associated booking or order" },
+        "subject": { "type": "string", "description": "Notification subject line" },
+        "recipient": { "type": "string", "description": "Target administrator email" },
+        "status": { "type": "string", "description": "sent, pending, failed" },
+        "summary": { "type": "string", "description": "Human-readable payload summary" },
+        "errorMessage": { "type": "string", "description": "Failure reason if delivery failed" },
+        "createdAt": { "type": "string", "description": "ISO timestamp" },
+        "lastAttemptAt": { "type": "string", "description": "ISO timestamp of last dispatch attempt" },
+        "retryCount": { "type": "number", "description": "Number of retry attempts" }
+      }
+    }
+  },
+  "firestore": {
+    "collections": {
+      "roomBookings": {
+        "entity": "RoomBooking",
+        "description": "Hotel bedroom reservations collection"
+      },
+      "cafeOrders": {
+        "entity": "CafeOrder",
+        "description": "Restaurant food and beverage orders collection"
+      },
+      "tableReservations": {
+        "entity": "TableReservation",
+        "description": "Dining table and catering reservations"
+      },
+      "adminNotifications": {
+        "entity": "AdminNotification",
+        "description": "Audit and retry outbox for admin alerts"
+      }
+    }
+  }
+}
