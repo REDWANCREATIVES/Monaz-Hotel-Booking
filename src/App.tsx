@@ -31,7 +31,8 @@ import {
   fetchAdminOrders,
   fetchAdminReservations,
   fetchAdminNotifications,
-  updateAdminBookingPayment
+  updateAdminBookingPayment,
+  API_BASE
 } from './services/dbService';
 
 export interface AdminSession {
@@ -181,21 +182,29 @@ export default function App() {
     }
   };
 
-  // Validate server session on startup & trigger initial admin fetch if valid
+  // Validate session on startup & trigger initial admin fetch if valid
   useEffect(() => {
     if (adminSession?.token) {
-      fetch('/api/admin/session', {
+      if (adminSession.expiresAt < Date.now()) {
+        setAdminSession(null);
+        sessionStorage.removeItem('monaz_admin_session');
+        return;
+      }
+      fetch(`${API_BASE}/api/admin/session`, {
         headers: { Authorization: `Bearer ${adminSession.token}` }
       })
         .then((res) => {
-          if (!res.ok) {
+          const contentType = res.headers.get('content-type') || '';
+          if (contentType.includes('application/json') && !res.ok) {
             setAdminSession(null);
             sessionStorage.removeItem('monaz_admin_session');
-          } else {
-            loadAdminData();
+            return;
           }
+          loadAdminData();
         })
-        .catch(() => {});
+        .catch(() => {
+          loadAdminData();
+        });
     }
   }, []);
 

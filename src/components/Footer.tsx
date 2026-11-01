@@ -21,7 +21,7 @@ export default function Footer({ onOpenAdmin, onOpenRooms, onOpenTracking }: Foo
           <div className="space-y-4">
             <Logo className="h-11 w-11" light={true} orangeAccent={true} />
             <p className="text-xs text-gray-300 leading-relaxed">
-              MONAZ HOTEL offers refined boutique accommodations, world-class Ethiopian hospitality, signature traditional dining feasts, gourmet burgers, and artisanal highland coffees.
+              Monaz Hotel &amp; Café offers refined boutique accommodations, world-class Ethiopian hospitality, signature traditional dining feasts, gourmet burgers, and artisanal highland coffees.
             </p>
             <div className="flex items-center gap-2 text-xs text-[#FB923C]">
               <span className="w-2 h-2 rounded-full bg-[#EA580C] animate-pulse" />
@@ -128,7 +128,7 @@ export default function Footer({ onOpenAdmin, onOpenRooms, onOpenTracking }: Foo
 
         {/* Bottom copyright */}
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between text-xs text-gray-400 gap-3">
-          <p>© {new Date().getFullYear()} MONAZ HOTEL. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} Monaz Hotel &amp; Café. All rights reserved.</p>
           <p className="flex items-center gap-1 text-[11px]">
             Crafted for exceptional hospitality & gourmet dining.
           </p>

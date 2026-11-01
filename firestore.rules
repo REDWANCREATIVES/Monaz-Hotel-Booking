@@ -25,8 +25,9 @@ service cloud.firestore {
                     && request.resource.data.totalPrice is number
                     && request.resource.data.totalPrice >= 0;
 
-      // Only authorized Monaz administrator can read, list, update or delete private bookings
-      allow read, update, delete: if isAdmin();
+      // Customer can get their single booking by unique reference ID; listing is strictly admin-only
+      allow get: if true;
+      allow list, update, delete: if isAdmin();
     }
 
     // Food & beverage orders collection
@@ -39,8 +40,9 @@ service cloud.firestore {
                     && request.resource.data.totalAmount is number
                     && request.resource.data.totalAmount >= 0;
 
-      // Only authorized Monaz administrator can inspect orders or change kitchen status
-      allow read, update, delete: if isAdmin();
+      // Customer can track their single order by reference ID; listing is strictly admin-only
+      allow get: if true;
+      allow list, update, delete: if isAdmin();
     }
 
     // Table reservations collection
@@ -49,7 +51,8 @@ service cloud.firestore {
                     && request.resource.data.name.size() >= 2
                     && request.resource.data.date is string
                     && request.resource.data.phone is string;
-      allow read, update, delete: if isAdmin();
+      allow get: if true;
+      allow list, update, delete: if isAdmin();
     }
 
     // Admin notifications outbox

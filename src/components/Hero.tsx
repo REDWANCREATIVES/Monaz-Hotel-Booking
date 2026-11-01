@@ -47,7 +47,7 @@ export default function Hero({ onExploreMenu, onOpenBooking, onOpenRoomModal, on
             >
               <span className="w-2 h-2 rounded-full bg-[#EA580C] animate-pulse" />
               <span className="text-xs uppercase tracking-[0.2em] font-bold text-[#2A1810]">
-                WELCOME TO <span className="text-[#EA580C]">MONAZ HOTEL</span>
+                WELCOME TO <span className="text-[#EA580C]">MONAZ HOTEL &amp; CAFÉ</span>
               </span>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#EA580C] text-white font-bold uppercase tracking-wider ml-1">
                 Betel, Addis Ababa

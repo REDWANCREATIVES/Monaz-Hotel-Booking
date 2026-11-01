@@ -33,7 +33,7 @@ export default function Logo({ className = 'h-11 w-11', showText = true, light =
             </span>
           </div>
           <span className={`font-sans text-[8.5px] tracking-[0.28em] font-semibold uppercase ${subtextColor} leading-none mt-1`}>
-            Suites & Restaurant
+            Hotel &amp; Café • Betel
           </span>
         </div>
       )}

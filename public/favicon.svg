@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2A1810"/>
+      <stop offset="50%" stop-color="#3D2012"/>
+      <stop offset="100%" stop-color="#1A0D07"/>
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FDBA74"/>
+      <stop offset="50%" stop-color="#EA580C"/>
+      <stop offset="100%" stop-color="#C2410C"/>
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#EA580C"/>
+      <stop offset="100%" stop-color="#FB923C"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Outer Rounded Shield -->
+  <rect x="4" y="4" width="120" height="120" rx="32" fill="url(#bgGrad)" stroke="url(#goldGrad)" stroke-width="4"/>
+  
+  <!-- Subtle Inner Border -->
+  <rect x="10" y="10" width="108" height="108" rx="26" fill="none" stroke="#FDBA74" stroke-width="1" stroke-opacity="0.3"/>
+
+  <!-- Crown / Stars Accent representing Premier Hotel -->
+  <path d="M48 30 L54 36 L64 26 L74 36 L80 30 L76 44 L52 44 Z" fill="url(#accentGrad)"/>
+  <circle cx="64" cy="22" r="3" fill="#FDBA74"/>
+  <circle cx="48" cy="26" r="2.2" fill="#FDBA74"/>
+  <circle cx="80" cy="26" r="2.2" fill="#FDBA74"/>
+
+  <!-- Monogram 'M' with Architectural Pillars -->
+  <path d="M38 96 L38 52 L54 78 L64 62 L74 78 L90 52 L90 96 L80 96 L80 68 L70 85 L58 85 L48 68 L48 96 Z" fill="#FFFFFF"/>
+
+  <!-- Coffee & Hospitality Warmth Accent Bar -->
+  <rect x="44" y="101" width="40" height="4" rx="2" fill="url(#goldGrad)"/>
+</svg>

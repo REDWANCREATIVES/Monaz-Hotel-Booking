@@ -174,7 +174,7 @@ export default function RoomBookingModal({
               </div>
               <div>
                 <h3 className="font-serif text-xl font-bold tracking-wide">
-                  MONAZ HOTEL <span className="text-[#FB923C]">RESERVATION</span>
+                  MONAZ HOTEL &amp; CAFÉ <span className="text-[#FB923C]">RESERVATION</span>
                 </h3>
                 <p className="text-xs text-gray-300">Betel, Addis Ababa • Reserve bedroom & download verified receipt</p>
               </div>

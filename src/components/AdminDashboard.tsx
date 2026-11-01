@@ -42,6 +42,7 @@ import {
 } from 'lucide-react';
 import { MenuItem, HotelRoom, RoomBooking, CafeOrder, TableReservation, AdminNotification, BookedService, ServiceCategory } from '../types';
 import { generateBookingReceiptPDF } from '../utils/pdfReceipt';
+import { API_BASE } from '../services/dbService';
 
 interface AdminDashboardProps {
   currentEmail?: string;
@@ -341,7 +342,7 @@ Monaz Executive Hospitality Team`;
     setSendingEmailRefId(service.id);
     setEmailActionMessage(null);
     try {
-      const res = await fetch('/api/admin/emails/resend', {
+      const res = await fetch(`${API_BASE}/api/admin/emails/resend`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -352,18 +353,35 @@ Monaz Executive Hospitality Team`;
           customNote
         })
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to dispatch email');
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
+        const data = await res.json();
+        setEmailSentSuccessRefId(service.id);
+        setEmailActionMessage(`Acceptance email successfully dispatched for #${service.id}!`);
+        setTimeout(() => {
+          setEmailSentSuccessRefId(null);
+          setEmailActionMessage(null);
+        }, 5000);
+        if (onRefreshAdminData) onRefreshAdminData();
+        return;
+      }
+      // If server route not available (e.g. static host), open Gmail directly
+      window.open(getDirectGmailComposeUrl(service), '_blank');
       setEmailSentSuccessRefId(service.id);
-      setEmailActionMessage(`Acceptance email successfully sent for #${service.id}!`);
+      setEmailActionMessage(`Opened pre-filled acceptance email in Gmail for #${service.id}!`);
       setTimeout(() => {
         setEmailSentSuccessRefId(null);
         setEmailActionMessage(null);
       }, 5000);
-      if (onRefreshAdminData) onRefreshAdminData();
     } catch (err: any) {
-      console.error('Email dispatch error:', err);
-      setEmailActionMessage(`Notice: ${err.message || 'Could not send automated email'}`);
+      console.warn('Backend email endpoint offline, opening Gmail compose draft:', err);
+      window.open(getDirectGmailComposeUrl(service), '_blank');
+      setEmailSentSuccessRefId(service.id);
+      setEmailActionMessage(`Opened pre-filled official acceptance draft in Gmail!`);
+      setTimeout(() => {
+        setEmailSentSuccessRefId(null);
+        setEmailActionMessage(null);
+      }, 5000);
     } finally {
       setSendingEmailRefId(null);
     }
@@ -380,7 +398,7 @@ Monaz Executive Hospitality Team`;
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="font-serif text-lg font-bold tracking-wide">MONAZ HOTEL</h2>
+              <h2 className="font-serif text-lg font-bold tracking-wide">MONAZ HOTEL &amp; CAFÉ</h2>
               <span className="px-2 py-0.5 rounded-full bg-[#EA580C] text-white text-[9px] font-bold uppercase tracking-wider">
                 ADMIN PORTAL
               </span>

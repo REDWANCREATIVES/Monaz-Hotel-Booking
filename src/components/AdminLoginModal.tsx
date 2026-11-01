@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ShieldCheck, ShieldAlert, Lock, User, Eye, EyeOff, X, Hotel, ArrowRight } from 'lucide-react';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../lib/firebase';
+import { API_BASE } from '../services/dbService';
 
 interface AdminLoginModalProps {
   isOpen: boolean;
@@ -39,8 +42,12 @@ export default function AdminLoginModal({
     setErrorMessage(null);
     setIsLoading(true);
 
+    let isServerJson = false;
+    let data: any = null;
+
+    // 1. Primary path: try backend API endpoint
     try {
-      const response = await fetch('/api/admin/login', {
+      const response = await fetch(`${API_BASE}/api/admin/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -49,9 +56,26 @@ export default function AdminLoginModal({
         })
       });
 
-      const data = await response.json();
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        data = await response.json();
+        isServerJson = true;
+      }
 
-      if (!response.ok) {
+      if (response.ok && isServerJson && data?.token && data?.admin) {
+        onLoginSuccess({
+          token: data.token,
+          username: data.admin.username,
+          email: data.admin.email,
+          role: data.admin.role,
+          expiresAt: data.expiresAt
+        });
+        onClose();
+        setIsLoading(false);
+        return;
+      }
+
+      if (isServerJson && data?.error) {
         if (response.status === 429) {
           setIsLockedOut(true);
           setErrorMessage(data.error || 'Too many failed attempts. Account temporarily locked for 15 minutes.');
@@ -61,22 +85,53 @@ export default function AdminLoginModal({
             setAttemptsRemaining(data.attemptsRemaining);
           }
         }
+        setIsLoading(false);
         return;
       }
-
-      // Success
-      if (data.token && data.admin) {
-        onLoginSuccess({
-          token: data.token,
-          username: data.admin.username,
-          email: data.admin.email,
-          role: data.admin.role,
-          expiresAt: data.expiresAt
-        });
-        onClose();
-      }
     } catch (err: unknown) {
-      setErrorMessage('Network connection error. Please verify the server is running.');
+      console.warn('[AdminLogin] Backend /api/admin/login unreachable, trying direct Firebase Authentication:', err);
+    }
+
+    // 2. Direct Firebase Authentication Fallback (for static hosts like Netlify)
+    const normUser = username.trim().toLowerCase().replace(/[\s\-_&]/g, '');
+    const isAuthorizedAdminUsername =
+      normUser === 'monazhotelandcafe' ||
+      normUser === 'monazhotelandcaf' ||
+      normUser === 'monazhotel' ||
+      normUser === 'monazhoteladmin' ||
+      normUser === 'monaz' ||
+      normUser === 'redwanredhood@gmail.com' ||
+      normUser === 'monazhoteladmin@gmail.com';
+
+    if (!isAuthorizedAdminUsername) {
+      setErrorMessage('Invalid administrator username or credentials.');
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      // Authenticate with Firebase Authentication directly
+      const userCred = await signInWithEmailAndPassword(auth, 'monazhoteladmin@gmail.com', password);
+      const token = await userCred.user.getIdToken();
+
+      onLoginSuccess({
+        token,
+        username: 'Monaz Hotel & Café',
+        email: 'redwanredhood@gmail.com',
+        role: 'admin',
+        expiresAt: Date.now() + 24 * 60 * 60 * 1000
+      });
+      onClose();
+    } catch (authErr: any) {
+      console.warn('[AdminLogin] Firebase Authentication attempt:', authErr?.code);
+      const code = authErr?.code || '';
+      if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+        setErrorMessage('Invalid password. Please check your admin credentials.');
+      } else if (code === 'auth/too-many-requests') {
+        setErrorMessage('Too many failed attempts. Please wait a few moments before trying again.');
+      } else {
+        setErrorMessage('Invalid administrator credentials.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -101,7 +156,7 @@ export default function AdminLoginModal({
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="font-serif text-lg font-bold tracking-wide">MONAZ HOTEL</h3>
+                  <h3 className="font-serif text-lg font-bold tracking-wide">MONAZ HOTEL &amp; CAFÉ</h3>
                   <span className="px-2 py-0.5 rounded-full bg-[#EA580C] text-white text-[9px] font-bold uppercase tracking-wider">
                     SECURE
                   </span>

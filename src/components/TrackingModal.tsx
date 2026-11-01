@@ -19,6 +19,7 @@ import {
   Receipt
 } from 'lucide-react';
 import { ServiceTrackingInfo, PaymentStatus } from '../types';
+import { fetchPublicTracking } from '../services/dbService';
 
 interface TrackingModalProps {
   isOpen: boolean;
@@ -74,21 +75,14 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({
     setError(null);
 
     try {
-      const res = await fetch(`/api/track/${encodeURIComponent(cleanId)}`);
-      const data = await res.json();
-
-      if (res.ok && data.tracking) {
-        setActiveTracking(data.tracking);
-        setSearchResults([]);
-        setLastUpdated(new Date());
-        localStorage.setItem('monaz_last_tracking_id', data.tracking.id);
-      } else {
-        // If not found by direct ID, attempt fuzzy search
-        await handleFuzzySearch(refId, isSilent);
-      }
-    } catch {
+      const tracking = await fetchPublicTracking(cleanId);
+      setActiveTracking(tracking);
+      setSearchResults([]);
+      setLastUpdated(new Date());
+      localStorage.setItem('monaz_last_tracking_id', tracking.id);
+    } catch (err: any) {
       if (!isSilent) {
-        setError('Unable to connect to live tracking server. Please check your connection.');
+        setError(err?.message || `Reference #${cleanId} was not found. Please double-check your code.`);
       }
     } finally {
       if (!isSilent) setIsLoading(false);

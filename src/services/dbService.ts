@@ -46,6 +46,17 @@ function doDatesOverlap(
   return startA < endB && endA > startB;
 }
 
+export const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+
+export function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = (err) => reject(err);
+    reader.readAsDataURL(file);
+  });
+}
+
 // ---------------------------------------------------------------------------
 // 1. HOTEL ROOM RESERVATIONS
 // ---------------------------------------------------------------------------
@@ -94,6 +105,9 @@ export async function createRoomBooking(input: CreateBookingInput): Promise<Room
   }
 
   // 3. Primary Path: Trusted Server-Side Endpoint with Concurrency & File Handling
+  let isServerJson = false;
+  let serverResult: any = null;
+
   try {
     const formData = new FormData();
     formData.append('roomId', input.roomId);
@@ -110,66 +124,106 @@ export async function createRoomBooking(input: CreateBookingInput): Promise<Room
       formData.append('receipt', input.receiptFile);
     }
 
-    const response = await fetch('/api/bookings', {
+    const response = await fetch(`${API_BASE}/api/bookings`, {
       method: 'POST',
       body: formData
     });
 
-    const result = await response.json();
-
-    if (!response.ok) {
-      throw new Error(result.error || 'Server could not process your reservation.');
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      serverResult = await response.json();
+      isServerJson = true;
     }
 
-    return result.booking as RoomBooking;
+    if (response.ok && isServerJson && serverResult?.booking) {
+      return serverResult.booking as RoomBooking;
+    }
+
+    if (isServerJson && serverResult?.error) {
+      throw new Error(serverResult.error);
+    }
   } catch (apiErr: any) {
-    // If error is from server rejection (e.g. 409 conflict or validation error), bubble directly
-    if (apiErr.message && !apiErr.message.includes('Failed to fetch') && !apiErr.message.includes('NetworkError')) {
+    if (isServerJson && serverResult?.error) {
       throw apiErr;
     }
+    console.warn('[dbService] Server endpoint unreachable or returned static HTML, transitioning to direct Firestore creation:', apiErr?.message);
+  }
 
-    // Direct Firestore fallback (strictly matching allow create rules)
-    console.warn('[dbService] Server endpoint unavailable, falling back to direct Firestore creation:', apiErr);
-    const room = HOTEL_ROOMS.find((r) => r.id === input.roomId) || HOTEL_ROOMS[0];
-    const dIn = new Date(input.checkInDate);
-    const dOut = new Date(input.checkOutDate);
-    const diffTime = Math.max(1000 * 60 * 60 * 24, dOut.getTime() - dIn.getTime());
-    const nights = Math.max(1, Math.round(diffTime / (1000 * 60 * 60 * 24)));
-    const roomSubtotal = room.pricePerNight * nights;
-    const taxesAndService = Math.round(roomSubtotal * 0.10);
-    const grandTotal = roomSubtotal + taxesAndService;
-    const bookingId = generateReferenceId('BK');
-    const createdAt = new Date().toISOString();
+  // Direct Firestore fallback (strictly matching allow create rules)
+  const room = HOTEL_ROOMS.find((r) => r.id === input.roomId) || HOTEL_ROOMS[0];
+  const dIn = new Date(input.checkInDate);
+  const dOut = new Date(input.checkOutDate);
+  const diffTime = Math.max(1000 * 60 * 60 * 24, dOut.getTime() - dIn.getTime());
+  const nights = Math.max(1, Math.round(diffTime / (1000 * 60 * 60 * 24)));
+  const roomSubtotal = room.pricePerNight * nights;
+  const taxesAndService = Math.round(roomSubtotal * 0.10);
+  const grandTotal = roomSubtotal + taxesAndService;
+  const bookingId = generateReferenceId('BK');
+  const createdAt = new Date().toISOString();
 
-    const fallbackBooking: RoomBooking = {
-      id: bookingId,
-      roomId: room.id,
-      roomName: room.name,
-      guestName: input.guestName.trim(),
-      guestEmail: input.guestEmail.trim() || ADMIN_EMAIL,
-      guestPhone: input.guestPhone.trim(),
-      checkInDate: input.checkInDate,
-      checkOutDate: input.checkOutDate,
-      nights,
-      guestsCount: input.guestsCount,
-      specialRequests: input.specialRequests ? input.specialRequests.trim() : '',
-      totalPrice: grandTotal,
-      currency: 'ETB',
-      status: 'pending',
-      paymentStatus: input.receiptFile ? 'proof_submitted' : 'unpaid',
-      notificationStatus: 'sent',
-      notificationRecipient: ADMIN_EMAIL,
-      createdAt
-    };
-
+  let paymentProof: any = undefined;
+  if (input.receiptFile) {
+    let fileDataUrl = '';
     try {
-      const docRef = doc(db, 'roomBookings', bookingId);
-      await setDoc(docRef, fallbackBooking);
-      return fallbackBooking;
-    } catch (fsErr: unknown) {
-      handleFirestoreError(fsErr, OperationType.CREATE, `roomBookings/${bookingId}`);
-      throw fsErr;
+      fileDataUrl = await readFileAsBase64(input.receiptFile);
+    } catch {
+      fileDataUrl = '';
     }
+    paymentProof = {
+      fileName: input.receiptFile.name,
+      fileSize: input.receiptFile.size,
+      fileType: input.receiptFile.type,
+      fileUrl: fileDataUrl,
+      uploadedAt: createdAt,
+      verificationNotes: 'Uploaded via customer portal. Identified bank payment slip awaiting admin confirmation.'
+    };
+  }
+
+  const fallbackBooking: RoomBooking = {
+    id: bookingId,
+    roomId: room.id,
+    roomName: room.name,
+    guestName: input.guestName.trim(),
+    guestEmail: input.guestEmail.trim() || ADMIN_EMAIL,
+    guestPhone: input.guestPhone.trim(),
+    checkInDate: input.checkInDate,
+    checkOutDate: input.checkOutDate,
+    nights,
+    guestsCount: input.guestsCount,
+    specialRequests: input.specialRequests ? input.specialRequests.trim() : '',
+    totalPrice: grandTotal,
+    currency: 'ETB',
+    status: 'pending',
+    paymentStatus: input.receiptFile ? 'proof_submitted' : 'unpaid',
+    paymentProof,
+    notificationStatus: 'sent',
+    notificationRecipient: ADMIN_EMAIL,
+    createdAt
+  };
+
+  try {
+    const docRef = doc(db, 'roomBookings', bookingId);
+    await setDoc(docRef, fallbackBooking);
+
+    // Save notification to admin outbox
+    await dispatchAdminNotification({
+      eventType: 'room_booking',
+      recordId: bookingId,
+      subject: `New Room Reservation — Monaz Hotel & Café (${room.name})`,
+      recipient: ADMIN_EMAIL,
+      summary: `Booking #${bookingId}: ${room.name} (${nights} nights, ${input.checkInDate} to ${input.checkOutDate}). Total: ${grandTotal.toLocaleString()} ETB. Guest: ${input.guestName} (${input.guestPhone}). Payment: ${input.receiptFile ? 'Bank Transfer Proof Attached' : 'Pay on Arrival'}`,
+      details: {
+        customerName: input.guestName.trim(),
+        contact: `${input.guestEmail || 'No email'} | ${input.guestPhone}`,
+        datesOrItems: `${input.checkInDate} to ${input.checkOutDate} (${nights} nights)`,
+        totalAmount: `${grandTotal.toLocaleString()} ETB`
+      }
+    }).catch((e) => console.warn('[Admin Notif]:', e));
+
+    return fallbackBooking;
+  } catch (fsErr: unknown) {
+    handleFirestoreError(fsErr, OperationType.CREATE, `roomBookings/${bookingId}`);
+    throw fsErr;
   }
 }
 
@@ -655,61 +709,203 @@ export function subscribeToAdminNotifications(
 }
 
 // ---------------------------------------------------------------------------
-// 7. AUTHORIZED ADMIN API FETCHERS (Server-Authoritative)
+// 7. AUTHORIZED ADMIN API FETCHERS (Server-Authoritative with Firestore Fallback)
 // ---------------------------------------------------------------------------
 
 export async function fetchAdminBookings(token: string): Promise<RoomBooking[]> {
-  const res = await fetch('/api/admin/bookings', {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  if (!res.ok) {
-    throw new Error('Failed to fetch admin bookings');
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/bookings`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const contentType = res.headers.get('content-type') || '';
+    if (res.ok && contentType.includes('application/json')) {
+      const data = await res.json();
+      if (Array.isArray(data.bookings)) return data.bookings;
+    }
+  } catch (err) {
+    console.warn('[dbService] Server /api/admin/bookings unavailable, falling back to direct Firestore:', err);
   }
-  const data = await res.json();
-  return data.bookings || [];
+
+  // Direct Firestore fetch
+  try {
+    const snap = await getDocs(collection(db, 'roomBookings'));
+    const list: RoomBooking[] = [];
+    snap.forEach((d) => list.push(d.data() as RoomBooking));
+    return list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+  } catch (fsErr) {
+    console.warn('[dbService] Direct Firestore bookings fetch notice:', fsErr);
+    return [];
+  }
 }
 
 export async function fetchAdminOrders(token: string): Promise<CafeOrder[]> {
-  const res = await fetch('/api/admin/orders', {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  if (!res.ok) {
-    throw new Error('Failed to fetch admin orders');
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/orders`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const contentType = res.headers.get('content-type') || '';
+    if (res.ok && contentType.includes('application/json')) {
+      const data = await res.json();
+      if (Array.isArray(data.orders)) return data.orders;
+    }
+  } catch (err) {
+    console.warn('[dbService] Server /api/admin/orders unavailable, falling back to direct Firestore:', err);
   }
-  const data = await res.json();
-  return data.orders || [];
+
+  // Direct Firestore fetch
+  try {
+    const snap = await getDocs(collection(db, 'cafeOrders'));
+    const list: CafeOrder[] = [];
+    snap.forEach((d) => list.push(d.data() as CafeOrder));
+    return list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+  } catch (fsErr) {
+    console.warn('[dbService] Direct Firestore orders fetch notice:', fsErr);
+    return [];
+  }
 }
 
 export async function fetchAdminReservations(token: string): Promise<TableReservation[]> {
-  const res = await fetch('/api/admin/reservations', {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  if (!res.ok) {
-    throw new Error('Failed to fetch admin reservations');
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/reservations`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const contentType = res.headers.get('content-type') || '';
+    if (res.ok && contentType.includes('application/json')) {
+      const data = await res.json();
+      if (Array.isArray(data.reservations)) return data.reservations;
+    }
+  } catch (err) {
+    console.warn('[dbService] Server /api/admin/reservations unavailable, falling back to direct Firestore:', err);
   }
-  const data = await res.json();
-  return data.reservations || [];
+
+  // Direct Firestore fetch
+  try {
+    const snap = await getDocs(collection(db, 'tableReservations'));
+    const list: TableReservation[] = [];
+    snap.forEach((d) => list.push(d.data() as TableReservation));
+    return list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+  } catch (fsErr) {
+    console.warn('[dbService] Direct Firestore reservations fetch notice:', fsErr);
+    return [];
+  }
 }
 
 export async function fetchAdminNotifications(token: string): Promise<AdminNotification[]> {
-  const res = await fetch('/api/admin/notifications', {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  if (!res.ok) {
-    throw new Error('Failed to fetch admin notifications');
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/notifications`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const contentType = res.headers.get('content-type') || '';
+    if (res.ok && contentType.includes('application/json')) {
+      const data = await res.json();
+      if (Array.isArray(data.notifications)) return data.notifications;
+    }
+  } catch (err) {
+    console.warn('[dbService] Server /api/admin/notifications unavailable, falling back to direct Firestore:', err);
   }
-  const data = await res.json();
-  return data.notifications || [];
+
+  // Direct Firestore fetch
+  try {
+    const snap = await getDocs(collection(db, 'adminNotifications'));
+    const list: AdminNotification[] = [];
+    snap.forEach((d) => list.push(d.data() as AdminNotification));
+    return list.sort((a, b) => new Date(b.lastAttemptAt || 0).getTime() - new Date(a.lastAttemptAt || 0).getTime());
+  } catch (fsErr) {
+    console.warn('[dbService] Direct Firestore notifications fetch notice:', fsErr);
+    return [];
+  }
 }
 
 export async function fetchAdminAllServices(token: string) {
-  const res = await fetch('/api/admin/services/all', {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  if (!res.ok) {
-    throw new Error('Failed to fetch all booked services');
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/services/all`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const contentType = res.headers.get('content-type') || '';
+    if (res.ok && contentType.includes('application/json')) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('[dbService] Server /api/admin/services/all unavailable, compiling from Firestore:', err);
   }
-  return await res.json();
+
+  // Fallback: compile directly from Firestore
+  const [bookings, orders, reservations] = await Promise.all([
+    fetchAdminBookings(token),
+    fetchAdminOrders(token),
+    fetchAdminReservations(token)
+  ]);
+
+  const unifiedServices: any[] = [];
+  bookings.forEach((b) => {
+    unifiedServices.push({
+      id: b.id,
+      category: 'hotel_room',
+      categoryLabel: 'Hotel Bedroom Stay',
+      title: b.roomName || 'Luxury Bedroom',
+      subtitle: `${b.nights} Night(s) • ${b.guestsCount} Guest(s)`,
+      customerName: b.guestName,
+      customerPhone: b.guestPhone,
+      customerEmail: b.guestEmail,
+      dateTimeInfo: `${b.checkInDate} → ${b.checkOutDate}`,
+      locationOrRoom: b.roomName,
+      totalPrice: b.totalPrice,
+      currency: b.currency || 'ETB',
+      status: b.status,
+      paymentStatus: b.paymentStatus || 'unpaid',
+      paymentProof: b.paymentProof,
+      specialRequests: b.specialRequests,
+      createdAt: b.createdAt,
+      rawDetails: b
+    });
+  });
+
+  orders.forEach((o) => {
+    unifiedServices.push({
+      id: o.id,
+      category: 'cafe_order',
+      categoryLabel: 'Kitchen & Bar Order',
+      title: o.deliveryType === 'room_delivery' ? `Room Service (${o.roomOrTableNumber})` : `Table Dining (${o.roomOrTableNumber})`,
+      subtitle: (o.items || []).map((i) => `${i.quantity}x ${i.name}`).join(', '),
+      customerName: o.customerName,
+      customerPhone: o.customerPhone,
+      customerEmail: o.customerEmail,
+      dateTimeInfo: new Date(o.createdAt).toLocaleString(),
+      locationOrRoom: o.roomOrTableNumber,
+      totalPrice: o.totalAmount,
+      currency: o.currency || 'ETB',
+      status: o.status,
+      paymentStatus: 'unpaid',
+      specialRequests: o.notes,
+      createdAt: o.createdAt,
+      rawDetails: o
+    });
+  });
+
+  reservations.forEach((r) => {
+    unifiedServices.push({
+      id: r.id,
+      category: r.bookingType === 'catering' ? 'banquet_catering' : 'table_dining',
+      categoryLabel: r.bookingType === 'catering' ? 'VIP Banquet Catering' : 'Dining Table',
+      title: r.bookingType === 'catering' ? 'Event Banquet & Catering' : 'Reserved Dining Table',
+      subtitle: `${r.guests} Guests • ${r.time}`,
+      customerName: r.name,
+      customerPhone: r.phone,
+      customerEmail: r.email,
+      dateTimeInfo: `${r.date} at ${r.time}`,
+      locationOrRoom: r.package || 'Dining Room',
+      totalPrice: 0,
+      currency: 'ETB',
+      status: r.status,
+      paymentStatus: 'unpaid',
+      specialRequests: r.notes,
+      createdAt: r.createdAt,
+      rawDetails: r
+    });
+  });
+
+  unifiedServices.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+  return { success: true, services: unifiedServices };
 }
 
 export async function updateAdminBookingPayment(
@@ -719,21 +915,156 @@ export async function updateAdminBookingPayment(
   verificationNotes?: string,
   bookingStatus?: string
 ): Promise<any> {
-  const res = await fetch(`/api/admin/bookings/${bookingId}/payment`, {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`
-    },
-    body: JSON.stringify({
-      paymentStatus,
-      verificationNotes,
-      bookingStatus
-    })
-  });
-  if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
-    throw new Error(errData.error || 'Failed to update payment status');
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/bookings/${bookingId}/payment`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        paymentStatus,
+        verificationNotes,
+        bookingStatus
+      })
+    });
+    const contentType = res.headers.get('content-type') || '';
+    if (res.ok && contentType.includes('application/json')) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('[dbService] Server payment update unavailable, falling back to direct Firestore:', err);
   }
-  return await res.json();
+
+  // Direct Firestore fallback for verified admin
+  try {
+    const bRef = doc(db, 'roomBookings', bookingId);
+    const existingSnap = await getDoc(bRef);
+    if (!existingSnap.exists()) {
+      throw new Error('Booking record not found');
+    }
+    const currentData = existingSnap.data() || {};
+    const updatedProof = {
+      ...(currentData.paymentProof || {}),
+      verifiedAt: new Date().toISOString(),
+      verifiedBy: 'Monaz Management',
+      verificationNotes: verificationNotes || currentData.paymentProof?.verificationNotes || ''
+    };
+    const updatePayload: any = {
+      paymentStatus,
+      paymentProof: updatedProof,
+      status: bookingStatus || (paymentStatus === 'verified' ? 'confirmed' : paymentStatus === 'rejected' ? 'rejected' : currentData.status),
+      updatedAt: new Date().toISOString()
+    };
+    await updateDoc(bRef, updatePayload);
+    return { success: true, id: bookingId, ...updatePayload };
+  } catch (fsErr: unknown) {
+    handleFirestoreError(fsErr, OperationType.UPDATE, `roomBookings/${bookingId}`);
+    throw fsErr;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 8. PUBLIC LIVE TRACKING FETCHER (Server API with Direct Firestore Fallback)
+// ---------------------------------------------------------------------------
+
+export async function fetchPublicTracking(refId: string): Promise<any> {
+  const cleanId = refId.trim().toUpperCase();
+  if (!cleanId) throw new Error('Invalid Reference ID');
+
+  // 1. Try server API
+  try {
+    const res = await fetch(`${API_BASE}/api/track/${encodeURIComponent(cleanId)}`);
+    const contentType = res.headers.get('content-type') || '';
+    if (res.ok && contentType.includes('application/json')) {
+      const data = await res.json();
+      if (data.tracking) return data.tracking;
+    }
+  } catch (err) {
+    console.warn('[dbService] Server tracking API unavailable, falling back to direct Firestore:', err);
+  }
+
+  // 2. Direct Firestore fallback by ID
+  const commonSupport = {
+    phone: '+251 91 123 4567',
+    email: 'redwanredhood@gmail.com',
+    location: 'Betel, Addis Ababa, Ethiopia'
+  };
+
+  if (cleanId.startsWith('BK-')) {
+    const docSnap = await getDoc(doc(db, 'roomBookings', cleanId));
+    if (docSnap.exists()) {
+      const record = docSnap.data();
+      const isConfirmed = record.status === 'confirmed' || record.paymentStatus === 'verified';
+      const hasProof = !!record.paymentProof;
+      return {
+        id: record.id,
+        category: 'hotel_room',
+        categoryLabel: 'Hotel Bedroom Stay',
+        title: record.roomName || 'Luxury Bedroom',
+        subtitle: `${record.nights || 1} Night(s) • ${record.guestsCount || 1} Guest(s)`,
+        customerName: record.guestName,
+        customerEmail: record.guestEmail,
+        customerPhone: record.guestPhone,
+        locationOrRoom: record.roomName || 'Bedroom Suite',
+        totalPrice: record.totalPrice || 0,
+        currency: record.currency || 'ETB',
+        status: record.status || 'pending',
+        statusLabel: isConfirmed ? 'Confirmed & Guaranteed' : 'Waiting for Admin Confirmation',
+        createdAt: record.createdAt,
+        updatedAt: record.updatedAt,
+        hasPaymentProof: hasProof,
+        paymentStatus: record.paymentStatus || 'unpaid',
+        paymentStatusLabel: record.paymentStatus === 'verified' ? 'Payment Verified & Approved' : hasProof ? 'Receipt Attached (Auditing)' : 'Pay on Arrival / Transfer Pending',
+        paymentProof: record.paymentProof,
+        steps: [
+          { key: 'step_submitted', title: 'Reservation Request Placed', description: `Booking #${record.id} safely received.`, status: 'completed', timestamp: record.createdAt },
+          { key: 'step_receipt', title: hasProof ? 'Payment Proof Identified' : 'Payment Method Pending', description: hasProof ? `Receipt attached: ${record.paymentProof?.fileName}. Status: ${record.paymentStatus === 'verified' ? 'Verified' : 'Under Audit'}.` : 'Due at check-in or bank transfer.', status: hasProof ? 'completed' : 'current' },
+          { key: 'step_accepted', title: isConfirmed ? 'Reservation Accepted & Confirmed' : 'Waiting for Admin Confirmation', description: isConfirmed ? 'Your room stay is officially approved by Monaz management.' : 'Administration is reviewing availability and proof.', status: isConfirmed ? 'completed' : 'current' },
+          { key: 'step_room_ready', title: 'Room Prepared & Welcome Ready', description: `Your room will be prepared for check-in on ${record.checkInDate}.`, status: record.status === 'checked-in' ? 'completed' : 'upcoming' },
+          { key: 'step_completed', title: 'Checked In & Enjoyed', description: 'Thank you for choosing Monaz Hotel & Café!', status: record.status === 'completed' ? 'completed' : 'upcoming' }
+        ],
+        supportContact: commonSupport
+      };
+    }
+  }
+
+  if (cleanId.startsWith('ORD-')) {
+    const docSnap = await getDoc(doc(db, 'cafeOrders', cleanId));
+    if (docSnap.exists()) {
+      const record = docSnap.data();
+      const isAccepted = record.status === 'accepted' || record.status === 'preparing' || record.status === 'ready' || record.status === 'completed';
+      const itemsSummary = (record.items || []).map((i: any) => `${i.quantity}x ${i.name}`).join(', ');
+      return {
+        id: record.id,
+        category: 'cafe_order',
+        categoryLabel: 'Kitchen & Bar Order',
+        title: record.deliveryType === 'room_delivery' ? `Room Service (${record.roomOrTableNumber})` : `Restaurant Dining (${record.roomOrTableNumber})`,
+        subtitle: itemsSummary,
+        customerName: record.customerName,
+        customerEmail: record.customerEmail,
+        customerPhone: record.customerPhone,
+        locationOrRoom: record.roomOrTableNumber,
+        totalPrice: record.totalAmount || 0,
+        currency: record.currency || 'ETB',
+        status: record.status || 'pending',
+        statusLabel: isAccepted ? 'Order Accepted!' : 'Waiting for Kitchen Confirmation',
+        createdAt: record.createdAt,
+        updatedAt: record.updatedAt,
+        hasPaymentProof: false,
+        paymentStatus: 'unpaid',
+        paymentStatusLabel: 'Cash / Card / Mobile Transfer on Delivery',
+        steps: [
+          { key: 'step_placed', title: 'Order Placed & In Queue', description: `Order #${record.id} received and transmitted to kitchen.`, status: 'completed', timestamp: record.createdAt },
+          { key: 'step_waiting', title: isAccepted ? 'Order Accepted by Kitchen' : 'Waiting for Kitchen Confirmation', description: isAccepted ? 'Chefs have reviewed and accepted your order!' : 'Waiting for kitchen manager to confirm availability.', status: isAccepted ? 'completed' : 'current' },
+          { key: 'step_prep', title: 'Cooking & Crafting Dishes', description: `Preparing: ${itemsSummary}.`, status: record.status === 'preparing' ? 'current' : record.status === 'ready' || record.status === 'completed' ? 'completed' : 'upcoming' },
+          { key: 'step_ready', title: 'Delivery / Ready for Dining', description: `Destination: ${record.roomOrTableNumber}.`, status: record.status === 'ready' ? 'current' : record.status === 'completed' ? 'completed' : 'upcoming' },
+          { key: 'step_completed', title: 'Delivered & Enjoyed', description: 'Thank you for dining with Monaz Hotel & Café!', status: record.status === 'completed' ? 'completed' : 'upcoming' }
+        ],
+        supportContact: commonSupport
+      };
+    }
+  }
+
+  throw new Error(`Reference #${cleanId} was not found. Please double-check your booking reference or order receipt code.`);
 }
