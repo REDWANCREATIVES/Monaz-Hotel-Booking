@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Sparkles, Check, Heart, ShoppingBag, X, Hotel, ShieldCheck } from 'lucide-react';
+import { onAuthStateChanged, signOut, User as FirebaseUser } from 'firebase/auth';
+import { auth } from './lib/firebase';
 
 import Header from './components/Header';
 import Hero from './components/Hero';
@@ -12,6 +14,7 @@ import CheckoutModal from './components/CheckoutModal';
 import RoomBookingModal from './components/RoomBookingModal';
 import AdminDashboard from './components/AdminDashboard';
 import AdminLoginModal from './components/AdminLoginModal';
+import AuthModal from './components/AuthModal';
 import FoodCursor from './components/FoodCursor';
 import { TrackingModal } from './components/TrackingModal';
 
@@ -140,6 +143,45 @@ export default function App() {
   const [lastAdminSync, setLastAdminSync] = useState<Date | null>(null);
   const [isTrackingOpen, setIsTrackingOpen] = useState(false);
   const [trackingRefId, setTrackingRefId] = useState<string | null>(null);
+
+  // Firebase Authenticated User State
+  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState<'signin' | 'signup'>('signin');
+
+  const handleOpenAuth = (mode: 'signin' | 'signup' = 'signin') => {
+    setAuthModalMode(mode);
+    setIsAuthModalOpen(true);
+  };
+
+  const handleSignOutAuth = async () => {
+    try {
+      await signOut(auth);
+      setCurrentUser(null);
+      showToast('Signed out of Monaz account.', 'favorite');
+    } catch (err) {
+      console.warn('Sign out error:', err);
+    }
+  };
+
+  // Listen to Firebase Authentication State Changes
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+      if (user && user.email?.toLowerCase() === 'redwanredhood@gmail.com') {
+        const adminSess: AdminSession = {
+          token: 'fb_' + user.uid,
+          username: user.displayName || 'Monaz Administrator',
+          email: user.email,
+          role: 'admin',
+          expiresAt: Date.now() + 24 * 60 * 60 * 1000
+        };
+        setAdminSession(adminSess);
+        sessionStorage.setItem('monaz_admin_session', JSON.stringify(adminSess));
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   const handleOpenTracking = (refId?: string) => {
     if (refId && typeof refId === 'string') {
@@ -572,6 +614,9 @@ export default function App() {
         onOpenTracking={handleOpenTracking}
         onLogout={handleLogout}
         adminSession={adminSession}
+        currentUser={currentUser}
+        onOpenAuth={handleOpenAuth}
+        onSignOutAuth={handleSignOutAuth}
       />
 
       {/* Main Page Sections */}
@@ -629,7 +674,7 @@ export default function App() {
         onRemoveItem={handleRemoveItem}
         onClearCart={handleClearCart}
         onOrderPlaced={handleOrderPlaced}
-        currentEmail={currentEmail}
+        currentEmail={currentUser?.email || currentEmail}
         onOpenTracking={handleOpenTracking}
       />
 
@@ -646,7 +691,7 @@ export default function App() {
         onClose={() => setIsRoomBookingOpen(false)}
         selectedRoom={selectedRoomForBooking}
         onBookingConfirmed={handleBookingConfirmed}
-        userEmail={currentEmail}
+        userEmail={currentUser?.email || currentEmail}
         onOpenTracking={handleOpenTracking}
       />
 
@@ -658,6 +703,16 @@ export default function App() {
           setTrackingRefId(null);
         }}
         initialReferenceId={trackingRefId}
+      />
+
+      {/* Customer Authentication Modal (Email/Password Sign In & Sign Up) */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        initialMode={authModalMode}
+        onSuccess={(user) => {
+          showToast(`Welcome, ${user.displayName || user.email}!`, 'success');
+        }}
       />
 
       {/* Dedicated Admin Login Modal */}

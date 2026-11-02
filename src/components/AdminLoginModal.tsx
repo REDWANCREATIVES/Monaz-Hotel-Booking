@@ -109,15 +109,30 @@ export default function AdminLoginModal({
       return;
     }
 
+    // Check master administrator password
+    if (password.trim() === 'Evolve digital marketing') {
+      onLoginSuccess({
+        token: 'admin_token_' + Date.now(),
+        username: 'Monaz Hotel & Café',
+        email: 'redwanredhood@gmail.com',
+        role: 'admin',
+        expiresAt: Date.now() + 24 * 60 * 60 * 1000
+      });
+      onClose();
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      // Authenticate with Firebase Authentication directly
-      const userCred = await signInWithEmailAndPassword(auth, 'monazhoteladmin@gmail.com', password);
+      // Authenticate with Firebase Authentication directly using email
+      const targetEmail = username.includes('@') ? username.trim() : 'redwanredhood@gmail.com';
+      const userCred = await signInWithEmailAndPassword(auth, targetEmail, password);
       const token = await userCred.user.getIdToken();
 
       onLoginSuccess({
         token,
-        username: 'Monaz Hotel & Café',
-        email: 'redwanredhood@gmail.com',
+        username: userCred.user.displayName || 'Monaz Hotel & Café',
+        email: userCred.user.email || 'redwanredhood@gmail.com',
         role: 'admin',
         expiresAt: Date.now() + 24 * 60 * 60 * 1000
       });

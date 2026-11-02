@@ -103,6 +103,7 @@ export interface CafeOrder {
   notificationError?: string;
   notificationLastAttempt?: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface TableReservation {
@@ -121,6 +122,7 @@ export interface TableReservation {
   notificationRecipient?: string;
   notificationError?: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface AdminNotification {
