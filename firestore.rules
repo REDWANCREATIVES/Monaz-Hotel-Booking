@@ -1,4 +1,5 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -7,68 +8,77 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // A user owns a document if their UID matches doc.userId
+    // or if their authenticated email matches guestEmail, customerEmail, or email
+    function isDocOwner(docData) {
+      return isAuthenticated() && (
+        (docData.userId != null && docData.userId == request.auth.uid) ||
+        (docData.guestEmail != null && request.auth.token.email != null && docData.guestEmail.lower() == request.auth.token.email.lower()) ||
+        (docData.customerEmail != null && request.auth.token.email != null && docData.customerEmail.lower() == request.auth.token.email.lower()) ||
+        (docData.email != null && request.auth.token.email != null && docData.email.lower() == request.auth.token.email.lower())
+      );
+    }
+
     function isAdmin() {
       return isAuthenticated() && (
-        request.auth.token.email.lower() == 'redwanredhood@gmail.com' ||
-        request.auth.token.email.lower() == 'monazhoteladmin@gmail.com' ||
+        (request.auth.token.email != null && (
+          request.auth.token.email.lower() == 'redwanredhood@gmail.com' ||
+          request.auth.token.email.lower() == 'monazhoteladmin@gmail.com'
+        )) ||
         (request.auth.token.keys().hasAll(['admin']) && request.auth.token.admin == true)
       );
     }
 
-    // Room bookings collection
+    // 1. User Profiles collection:
+    // Each user can ONLY read and write their own profile document. No other user can access it.
+    match /users/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    // 2. Room Bookings collection:
+    // Each user can ONLY read, update, or cancel their own room bookings.
+    // Placement is open to guests/users; unauthorized users cannot read or modify other bookings.
+    // Admin retains full operational oversight.
     match /roomBookings/{bookingId} {
-      // Ordinary customers can submit a booking with required validated fields
-      allow create: if request.resource.data.guestName is string
-                    && request.resource.data.guestName.size() >= 2
-                    && request.resource.data.checkInDate is string
-                    && request.resource.data.checkOutDate is string
-                    && request.resource.data.totalPrice is number
-                    && request.resource.data.totalPrice >= 0;
-
-      // Customer can get their single booking by unique reference ID; listing is strictly admin-only
-      allow get: if true;
-      allow list, update, delete: if isAdmin();
+      allow create: if true;
+      allow read: if isDocOwner(resource.data) || isAdmin();
+      allow update, delete: if isDocOwner(resource.data) || isAdmin();
     }
 
-    // Food & beverage orders collection
+    // 3. Cafe & Kitchen Orders collection:
+    // Each user can ONLY read and manage their own orders.
+    // No user can access or view another customer's orders.
     match /cafeOrders/{orderId} {
-      // Ordinary customers can place valid dining or room service orders
-      allow create: if request.resource.data.customerName is string
-                    && request.resource.data.customerName.size() >= 2
-                    && request.resource.data.items is list
-                    && request.resource.data.items.size() > 0
-                    && request.resource.data.totalAmount is number
-                    && request.resource.data.totalAmount >= 0;
-
-      // Customer can track their single order by reference ID; listing is strictly admin-only
-      allow get: if true;
-      allow list, update, delete: if isAdmin();
+      allow create: if true;
+      allow read: if isDocOwner(resource.data) || isAdmin();
+      allow update, delete: if isDocOwner(resource.data) || isAdmin();
     }
 
-    // Table reservations collection
+    // 4. Table Reservations & Catering collection:
+    // Each user can ONLY access and manage their own reservations.
     match /tableReservations/{resId} {
-      allow create: if request.resource.data.name is string
-                    && request.resource.data.name.size() >= 2
-                    && request.resource.data.date is string
-                    && request.resource.data.phone is string;
-      allow get: if true;
-      allow list, update, delete: if isAdmin();
+      allow create: if true;
+      allow read: if isDocOwner(resource.data) || isAdmin();
+      allow update, delete: if isDocOwner(resource.data) || isAdmin();
     }
 
-    // Admin notifications outbox
+    // 5. Admin Notifications & Internal Logs:
+    // Only authorized hotel management can read, update, or delete notification alerts.
     match /adminNotifications/{notifId} {
-      allow create: if request.resource.data.subject is string
-                    && request.resource.data.recipient is string;
+      allow create: if true;
       allow read, update, delete: if isAdmin();
     }
 
-    // Outbound email notifications log
     match /emailNotifications/{emailId} {
-      allow create: if request.resource.data.target is string;
+      allow create: if true;
       allow read, update, delete: if isAdmin();
     }
 
-    // Catch-all deny
+    // 6. Strict Default Catch-All: Deny all read and write by default
     match /{document=**} {
       allow read, write: if false;
     }

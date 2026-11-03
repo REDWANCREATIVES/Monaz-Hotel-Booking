@@ -447,18 +447,16 @@ export default function App() {
       prev.map((b) => (b.id === bookingId ? { ...b, status: newStatus } : b))
     );
     try {
-      if (adminSession?.token) {
-        await fetch(`/api/admin/bookings/${bookingId}/status`, {
+      await updateBookingStatusInDb(bookingId, newStatus);
+      if (adminSession?.token && API_BASE) {
+        fetch(`${API_BASE}/api/admin/bookings/${bookingId}/status`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${adminSession.token}`
           },
           body: JSON.stringify({ status: newStatus })
-        });
-        loadAdminData();
-      } else {
-        await updateBookingStatusInDb(bookingId, newStatus);
+        }).catch(() => {});
       }
       showToast(`Updated reservation ${bookingId} to ${newStatus}`, 'admin');
     } catch {
@@ -492,16 +490,21 @@ export default function App() {
     );
 
     try {
-      if (adminSession?.token) {
-        await fetch(`/api/admin/bookings/${bookingId}/payment`, {
+      await updateAdminBookingPayment(
+        adminSession?.token || '',
+        bookingId,
+        paymentStatus || 'unpaid',
+        notes
+      );
+      if (adminSession?.token && API_BASE) {
+        fetch(`${API_BASE}/api/admin/bookings/${bookingId}/payment`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${adminSession.token}`
           },
           body: JSON.stringify({ paymentStatus, verificationNotes: notes })
-        });
-        loadAdminData();
+        }).catch(() => {});
       }
       showToast(`Payment status updated to "${paymentStatus}" for ${bookingId}`, 'admin');
     } catch {
@@ -514,17 +517,16 @@ export default function App() {
       prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
     );
     try {
-      if (adminSession?.token) {
-        await fetch(`/api/admin/orders/${orderId}/status`, {
+      await updateOrderStatusInDb(orderId, newStatus);
+      if (adminSession?.token && API_BASE) {
+        fetch(`${API_BASE}/api/admin/orders/${orderId}/status`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${adminSession.token}`
           },
           body: JSON.stringify({ status: newStatus })
-        });
-      } else {
-        await updateOrderStatusInDb(orderId, newStatus);
+        }).catch(() => {});
       }
       showToast(`Updated order ${orderId} status to ${newStatus}`, 'admin');
     } catch {
@@ -537,17 +539,16 @@ export default function App() {
       prev.map((r) => (r.id === resId ? { ...r, status: newStatus } : r))
     );
     try {
-      if (adminSession?.token) {
-        await fetch(`/api/admin/reservations/${resId}/status`, {
+      await updateReservationStatusInDb(resId, newStatus);
+      if (adminSession?.token && API_BASE) {
+        fetch(`${API_BASE}/api/admin/reservations/${resId}/status`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${adminSession.token}`
           },
           body: JSON.stringify({ status: newStatus })
-        });
-      } else {
-        await updateReservationStatusInDb(resId, newStatus);
+        }).catch(() => {});
       }
       showToast(`Updated table reservation ${resId} to ${newStatus}`, 'admin');
     } catch {
@@ -557,13 +558,12 @@ export default function App() {
 
   const handleRetryNotification = async (notification: AdminNotification) => {
     try {
-      if (adminSession?.token) {
-        await fetch(`/api/admin/notifications/${notification.id}/retry`, {
+      await retryNotification(notification);
+      if (adminSession?.token && API_BASE) {
+        fetch(`${API_BASE}/api/admin/notifications/${notification.id}/retry`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${adminSession.token}` }
-        });
-      } else {
-        await retryNotification(notification);
+        }).catch(() => {});
       }
       showToast(`Re-dispatched alert to ${notification.recipient}`, 'admin');
     } catch {

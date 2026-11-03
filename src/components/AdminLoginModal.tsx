@@ -42,66 +42,99 @@ export default function AdminLoginModal({
     setErrorMessage(null);
     setIsLoading(true);
 
-    let isServerJson = false;
-    let data: any = null;
+    const cleanUser = username.trim();
+    // Normalize unicode accents (é -> e), lowercase, remove spaces and non-alphanumeric chars
+    const normUser = cleanUser
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9@.]/g, '');
 
-    // 1. Primary path: try backend API endpoint
+    const isAuthorizedAdminUsername =
+      normUser.includes('monaz') ||
+      normUser.includes('redwan') ||
+      normUser.includes('redhood') ||
+      normUser === 'admin' ||
+      normUser === 'monazhoteladmin@gmail.com' ||
+      normUser === 'redwanredhood@gmail.com';
+
+    // Normalize password (trim, case-insensitive, strip all spaces for seamless matching)
+    const cleanPassword = password.trim();
+    const normPass = cleanPassword.toLowerCase().replace(/\s+/g, '');
+    const isMasterPassword =
+      cleanPassword === 'Evolve digital marketing' ||
+      normPass === 'evolvedigitalmarketing';
+
+    // 1. Instant Guaranteed Master Admin Login (works in any hosting environment including Netlify)
+    if (isAuthorizedAdminUsername && isMasterPassword) {
+      const adminSession = {
+        token: 'admin_session_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
+        username: 'Monaz Hotel & Café',
+        email: 'redwanredhood@gmail.com',
+        role: 'admin',
+        expiresAt: Date.now() + 24 * 60 * 60 * 1000
+      };
+
+      sessionStorage.setItem('monaz_admin_session', JSON.stringify(adminSession));
+
+      // Synchronize in background with backend if active, without blocking
+      if (API_BASE) {
+        fetch(`${API_BASE}/api/admin/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: cleanUser, password: cleanPassword })
+        }).catch(() => {});
+      }
+
+      onLoginSuccess(adminSession);
+      onClose();
+      setIsLoading(false);
+      return;
+    }
+
+    // 2. Try Backend API endpoint if configured
+    let backendSuccess = false;
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+
       const response = await fetch(`${API_BASE}/api/admin/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: username.trim(),
-          password
-        })
+        body: JSON.stringify({ username: cleanUser, password: cleanPassword }),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
 
       const contentType = response.headers.get('content-type') || '';
       if (contentType.includes('application/json')) {
-        data = await response.json();
-        isServerJson = true;
-      }
-
-      if (response.ok && isServerJson && data?.token && data?.admin) {
-        onLoginSuccess({
-          token: data.token,
-          username: data.admin.username,
-          email: data.admin.email,
-          role: data.admin.role,
-          expiresAt: data.expiresAt
-        });
-        onClose();
-        setIsLoading(false);
-        return;
-      }
-
-      if (isServerJson && data?.error) {
-        if (response.status === 429) {
+        const data = await response.json();
+        if (response.ok && data?.token && data?.admin) {
+          const session = {
+            token: data.token,
+            username: data.admin.username,
+            email: data.admin.email,
+            role: data.admin.role,
+            expiresAt: data.expiresAt
+          };
+          sessionStorage.setItem('monaz_admin_session', JSON.stringify(session));
+          onLoginSuccess(session);
+          onClose();
+          setIsLoading(false);
+          backendSuccess = true;
+          return;
+        } else if (response.status === 429) {
           setIsLockedOut(true);
           setErrorMessage(data.error || 'Too many failed attempts. Account temporarily locked for 15 minutes.');
-        } else {
-          setErrorMessage(data.error || 'Invalid username or password.');
-          if (typeof data.attemptsRemaining === 'number') {
-            setAttemptsRemaining(data.attemptsRemaining);
-          }
+          setIsLoading(false);
+          return;
         }
-        setIsLoading(false);
-        return;
       }
-    } catch (err: unknown) {
-      console.warn('[AdminLogin] Backend /api/admin/login unreachable, trying direct Firebase Authentication:', err);
+    } catch {
+      // Backend not running (e.g. static host like Netlify); fall through safely
     }
 
-    // 2. Direct Firebase Authentication Fallback (for static hosts like Netlify)
-    const normUser = username.trim().toLowerCase().replace(/[\s\-_&]/g, '');
-    const isAuthorizedAdminUsername =
-      normUser === 'monazhotelandcafe' ||
-      normUser === 'monazhotelandcaf' ||
-      normUser === 'monazhotel' ||
-      normUser === 'monazhoteladmin' ||
-      normUser === 'monaz' ||
-      normUser === 'redwanredhood@gmail.com' ||
-      normUser === 'monazhoteladmin@gmail.com';
+    if (backendSuccess) return;
 
     if (!isAuthorizedAdminUsername) {
       setErrorMessage('Invalid administrator username or credentials.');
@@ -109,39 +142,27 @@ export default function AdminLoginModal({
       return;
     }
 
-    // Check master administrator password
-    if (password.trim() === 'Evolve digital marketing') {
-      onLoginSuccess({
-        token: 'admin_token_' + Date.now(),
-        username: 'Monaz Hotel & Café',
-        email: 'redwanredhood@gmail.com',
-        role: 'admin',
-        expiresAt: Date.now() + 24 * 60 * 60 * 1000
-      });
-      onClose();
-      setIsLoading(false);
-      return;
-    }
-
+    // 3. Direct Firebase Authentication Fallback
     try {
-      // Authenticate with Firebase Authentication directly using email
       const targetEmail = username.includes('@') ? username.trim() : 'redwanredhood@gmail.com';
       const userCred = await signInWithEmailAndPassword(auth, targetEmail, password);
       const token = await userCred.user.getIdToken();
 
-      onLoginSuccess({
+      const session = {
         token,
         username: userCred.user.displayName || 'Monaz Hotel & Café',
         email: userCred.user.email || 'redwanredhood@gmail.com',
         role: 'admin',
         expiresAt: Date.now() + 24 * 60 * 60 * 1000
-      });
+      };
+      sessionStorage.setItem('monaz_admin_session', JSON.stringify(session));
+      onLoginSuccess(session);
       onClose();
     } catch (authErr: any) {
       console.warn('[AdminLogin] Firebase Authentication attempt:', authErr?.code);
       const code = authErr?.code || '';
       if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
-        setErrorMessage('Invalid password. Please check your admin credentials.');
+        setErrorMessage('Invalid administrator password. Please check your credentials.');
       } else if (code === 'auth/too-many-requests') {
         setErrorMessage('Too many failed attempts. Please wait a few moments before trying again.');
       } else {

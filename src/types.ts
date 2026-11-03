@@ -51,6 +51,7 @@ export interface PaymentProof {
 
 export interface RoomBooking {
   id: string;
+  userId?: string;
   roomId: string;
   roomName: string;
   guestName: string;
@@ -86,6 +87,7 @@ export interface OrderItem {
 
 export interface CafeOrder {
   id: string;
+  userId?: string;
   customerName: string;
   customerEmail: string;
   customerPhone: string;
@@ -108,6 +110,7 @@ export interface CafeOrder {
 
 export interface TableReservation {
   id: string;
+  userId?: string;
   bookingType: 'reservation' | 'catering';
   name: string;
   email: string;

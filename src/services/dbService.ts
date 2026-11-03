@@ -10,7 +10,7 @@ import {
   orderBy,
   onSnapshot
 } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db, auth } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrors';
 import {
   RoomBooking,
@@ -150,6 +150,7 @@ export async function createRoomBooking(input: CreateBookingInput): Promise<Room
 
   const newBooking: RoomBooking = {
     id: bookingId,
+    userId: (auth as any)?.currentUser?.uid || undefined,
     roomId: room.id,
     roomName: room.name,
     guestName: input.guestName.trim(),
@@ -256,6 +257,7 @@ export async function createCafeOrder(input: CreateOrderInput): Promise<CafeOrde
 
   const newOrder: CafeOrder = {
     id: orderId,
+    userId: (auth as any)?.currentUser?.uid || undefined,
     customerName: input.customerName.trim(),
     customerEmail: input.customerEmail.trim() || ADMIN_EMAIL,
     customerPhone: input.customerPhone.trim(),
@@ -339,6 +341,7 @@ export async function createTableReservation(input: CreateTableReservationInput)
 
   const newReservation: TableReservation = {
     id: resId,
+    userId: (auth as any)?.currentUser?.uid || undefined,
     bookingType: input.bookingType,
     name: input.name.trim(),
     email: input.email.trim() || ADMIN_EMAIL,

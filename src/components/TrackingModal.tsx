@@ -96,27 +96,60 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: queryText })
       });
-      const data = await res.json();
 
-      if (res.ok && Array.isArray(data.results) && data.results.length > 0) {
-        if (data.results.length === 1) {
-          setActiveTracking(data.results[0]);
-          setSearchResults([]);
-          localStorage.setItem('monaz_last_tracking_id', data.results[0].id);
-        } else {
-          setSearchResults(data.results);
-          setActiveTracking(null);
-        }
-        setLastUpdated(new Date());
-      } else {
-        if (!isSilent) {
-          setError(`No active booking or food order found matching "${queryText}". Please verify your reference number or phone.`);
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
+        const data = await res.json();
+        if (Array.isArray(data.results) && data.results.length > 0) {
+          if (data.results.length === 1) {
+            setActiveTracking(data.results[0]);
+            setSearchResults([]);
+            localStorage.setItem('monaz_last_tracking_id', data.results[0].id);
+          } else {
+            setSearchResults(data.results);
+            setActiveTracking(null);
+          }
+          setLastUpdated(new Date());
+          return;
         }
       }
     } catch {
-      if (!isSilent) {
-        setError('Search operation failed. Please try again.');
+      // Backend not running; fall through to local lookup
+    }
+
+    // Direct fallback lookup by reference ID, phone, or name from client cache
+    try {
+      const cleanQ = queryText.trim().toLowerCase();
+      const rawBookings = localStorage.getItem('monaz_room_bookings');
+      const rawOrders = localStorage.getItem('monaz_cafe_orders');
+      const bookings: any[] = rawBookings ? JSON.parse(rawBookings) : [];
+      const orders: any[] = rawOrders ? JSON.parse(rawOrders) : [];
+
+      const matchedBooking = bookings.find(
+        (b) =>
+          b.id.toLowerCase() === cleanQ ||
+          (b.guestPhone && b.guestPhone.replace(/\D/g, '').includes(cleanQ.replace(/\D/g, ''))) ||
+          (b.guestName && b.guestName.toLowerCase().includes(cleanQ))
+      );
+      if (matchedBooking) {
+        await fetchTracking(matchedBooking.id, isSilent);
+        return;
       }
+
+      const matchedOrder = orders.find(
+        (o) =>
+          o.id.toLowerCase() === cleanQ ||
+          (o.customerPhone && o.customerPhone.replace(/\D/g, '').includes(cleanQ.replace(/\D/g, ''))) ||
+          (o.customerName && o.customerName.toLowerCase().includes(cleanQ))
+      );
+      if (matchedOrder) {
+        await fetchTracking(matchedOrder.id, isSilent);
+        return;
+      }
+    } catch {}
+
+    if (!isSilent) {
+      setError(`No active booking or food order found matching "${queryText}". Please verify your reference number or phone.`);
     }
   };
 
