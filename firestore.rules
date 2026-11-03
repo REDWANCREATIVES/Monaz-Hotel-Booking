@@ -15,22 +15,19 @@ service cloud.firestore {
     // 2. Room Bookings (Hotel Accommodations)
     // Synchronized across all customer and admin devices (phones, tablets, laptops)
     match /roomBookings/{bookingId} {
-      allow read, create, update: if true;
-      allow delete: if isAuthenticated();
+      allow read, create, update, delete: if true;
     }
 
     // 3. Cafe & Kitchen Orders (Food & Beverage)
     // Synchronized across all devices so the admin board and kitchen display all live orders
     match /cafeOrders/{orderId} {
-      allow read, create, update: if true;
-      allow delete: if isAuthenticated();
+      allow read, create, update, delete: if true;
     }
 
     // 4. Table Reservations & Catering
     // Real-time access across all devices
     match /tableReservations/{resId} {
-      allow read, create, update: if true;
-      allow delete: if isAuthenticated();
+      allow read, create, update, delete: if true;
     }
 
     // 5. Admin Notifications & Live Alerts

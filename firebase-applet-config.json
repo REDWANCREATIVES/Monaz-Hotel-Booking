@@ -1,9 +1,12 @@
 {
   "projectId": "monaz-hotel",
-  "appId": "1:427992087338:web:b659ddad2c4814411e3c53",
+  "appId": "1:427992087338:web:db2c523bb89519011e3c53",
   "apiKey": "AIzaSyD2mwbe5zUCP0l1iQxuFB04BNlCJ01ZZiQ",
   "authDomain": "monaz-hotel.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-rahacoffee-5cebb078-bf96-4a81-9b6b-fc557df154c0",
   "storageBucket": "monaz-hotel.firebasestorage.app",
   "messagingSenderId": "427992087338",
-  "measurementId": "G-0BY0DL0GMG"
+  "measurementId": "",
+  "oAuthClientId": "427992087338-2ho4dhegbibngmhh4r5tt7t34ntc4e70.apps.googleusercontent.com",
+  "recaptchaSiteKey": ""
 }

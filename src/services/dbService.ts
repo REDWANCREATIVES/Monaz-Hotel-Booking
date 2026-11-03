@@ -25,7 +25,7 @@ import {
 import { HOTEL_ROOMS, MENU_ITEMS, INITIAL_ROOM_BOOKINGS, INITIAL_CAFE_ORDERS } from '../data';
 
 export const ADMIN_EMAIL = 'redwanredhood@gmail.com';
-export const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+export const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL || '').replace(/\/$/, '');
 export { testConnection } from '../lib/firebase';
 
 // Generate short readable IDs
