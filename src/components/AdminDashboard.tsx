@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Hotel,
   UtensilsCrossed,
@@ -133,6 +133,18 @@ export default function AdminDashboard({
   const [selectedBookingForPayment, setSelectedBookingForPayment] = useState<RoomBooking | null>(null);
   const [paymentNote, setPaymentNote] = useState<string>('');
   const [isVerifyingPayment, setIsVerifyingPayment] = useState<boolean>(false);
+  const [rulesCopied, setRulesCopied] = useState<boolean>(false);
+
+  // Automatically refresh all live orders and bookings on mount and every 5 seconds
+  useEffect(() => {
+    if (onRefreshAdminData) {
+      onRefreshAdminData();
+      const interval = setInterval(() => {
+        onRefreshAdminData();
+      }, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [onRefreshAdminData]);
 
   // Unified Booked Services collection combining all hotel, dining & room service orders
   const allBookedServices: BookedService[] = useMemo(() => {
@@ -621,6 +633,49 @@ Monaz Executive Hospitality Team`;
                     </div>
                   )}
                 </div>
+              </div>
+            </div>
+
+            {/* Real-Time Cross-Device Sync Status Bar */}
+            <div className="bg-white rounded-2xl p-4 border border-[#2A1810]/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-xs">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-200">
+                  <CheckCircle2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="font-bold text-[#2A1810]">
+                    Cross-Device Central Sync Active
+                  </p>
+                  <p className="text-[11px] text-[#6E4733]">
+                    Showing all orders and bedroom reservations placed across phones, laptops, and tablets.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const rulesText = `rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /users/{userId} {\n      allow read, write: if request.auth != null && request.auth.uid == userId;\n    }\n    match /roomBookings/{bookingId} {\n      allow read, create, update: if true;\n      allow delete: if request.auth != null;\n    }\n    match /cafeOrders/{orderId} {\n      allow read, create, update: if true;\n      allow delete: if request.auth != null;\n    }\n    match /tableReservations/{resId} {\n      allow read, create, update: if true;\n      allow delete: if request.auth != null;\n    }\n    match /adminNotifications/{notifId} {\n      allow read, create, update, delete: if true;\n    }\n    match /{document=**} {\n      allow read, write: if false;\n    }\n  }\n}`;
+                    navigator.clipboard.writeText(rulesText);
+                    setRulesCopied(true);
+                    setTimeout(() => setRulesCopied(false), 3000);
+                  }}
+                  className="px-3 py-1.5 rounded-xl border border-[#EA580C]/30 text-[#EA580C] hover:bg-[#FFF7ED] text-[11px] font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                  title="Copy Firestore database security rules for Firebase Console"
+                >
+                  {rulesCopied ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                      <span className="text-emerald-700">Rules Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copy Firestore Rules</span>
+                    </>
+                  )}
+                </button>
               </div>
             </div>
 

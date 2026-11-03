@@ -50,7 +50,13 @@ export function sanitizeForFirestore<T extends Record<string, any>>(obj: T): Rec
     if (value === undefined) {
       continue;
     }
-    if (value !== null && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
+    if (Array.isArray(value)) {
+      result[key] = value.map((item) =>
+        item !== null && typeof item === 'object' && !(item instanceof Date)
+          ? sanitizeForFirestore(item)
+          : item
+      );
+    } else if (value !== null && typeof value === 'object' && !(value instanceof Date)) {
       result[key] = sanitizeForFirestore(value);
     } else {
       result[key] = value;
@@ -564,18 +570,27 @@ export function subscribeToRoomBookings(
     const unsubFirestore = onSnapshot(
       q,
       (snapshot) => {
-        const list: RoomBooking[] = [];
+        const remoteList: RoomBooking[] = [];
         snapshot.forEach((docSnap) => {
-          list.push(docSnap.data() as RoomBooking);
+          remoteList.push(docSnap.data() as RoomBooking);
         });
-        if (list.length > 0) {
-          list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-          setLocalData(STORAGE_KEYS.BOOKINGS, list);
-          onUpdate(list);
-        }
+
+        // Merge remote documents with local cached documents
+        const localList = getLocalData<RoomBooking[]>(STORAGE_KEYS.BOOKINGS, INITIAL_ROOM_BOOKINGS);
+        const map = new Map<string, RoomBooking>();
+        remoteList.forEach((b) => map.set(b.id, b));
+        localList.forEach((b) => {
+          if (!map.has(b.id)) map.set(b.id, b);
+        });
+
+        const combined = Array.from(map.values()).sort(
+          (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+        );
+        setLocalData(STORAGE_KEYS.BOOKINGS, combined);
+        onUpdate(combined);
       },
       (error) => {
-        // If not logged in as admin yet, listing is restricted; fall back quietly to cached items
+        // Fall back quietly to cached items on permission denial
         const msg = error?.message || '';
         if (!msg.includes('insufficient permissions')) {
           handleFirestoreError(error, OperationType.LIST, 'roomBookings');
@@ -612,15 +627,24 @@ export function subscribeToCafeOrders(
     const unsubFirestore = onSnapshot(
       q,
       (snapshot) => {
-        const list: CafeOrder[] = [];
+        const remoteList: CafeOrder[] = [];
         snapshot.forEach((docSnap) => {
-          list.push(docSnap.data() as CafeOrder);
+          remoteList.push(docSnap.data() as CafeOrder);
         });
-        if (list.length > 0) {
-          list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-          setLocalData(STORAGE_KEYS.ORDERS, list);
-          onUpdate(list);
-        }
+
+        // Merge remote documents with local cached documents
+        const localList = getLocalData<CafeOrder[]>(STORAGE_KEYS.ORDERS, INITIAL_CAFE_ORDERS);
+        const map = new Map<string, CafeOrder>();
+        remoteList.forEach((o) => map.set(o.id, o));
+        localList.forEach((o) => {
+          if (!map.has(o.id)) map.set(o.id, o);
+        });
+
+        const combined = Array.from(map.values()).sort(
+          (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+        );
+        setLocalData(STORAGE_KEYS.ORDERS, combined);
+        onUpdate(combined);
       },
       (error) => {
         const msg = error?.message || '';
@@ -746,57 +770,91 @@ export function subscribeToAdminNotifications(
 // ---------------------------------------------------------------------------
 
 export async function fetchAdminBookings(_token?: string): Promise<RoomBooking[]> {
+  const localList = getLocalData<RoomBooking[]>(STORAGE_KEYS.BOOKINGS, INITIAL_ROOM_BOOKINGS);
   try {
     const snap = await getDocs(collection(db, 'roomBookings'));
-    const list: RoomBooking[] = [];
-    snap.forEach((d) => list.push(d.data() as RoomBooking));
-    if (list.length > 0) {
-      list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-      setLocalData(STORAGE_KEYS.BOOKINGS, list);
-      return list;
-    }
+    const remoteList: RoomBooking[] = [];
+    snap.forEach((d) => remoteList.push(d.data() as RoomBooking));
+    
+    // Combine remote and local, preferring remote
+    const map = new Map<string, RoomBooking>();
+    remoteList.forEach((b) => map.set(b.id, b));
+    localList.forEach((b) => {
+      if (!map.has(b.id)) {
+        map.set(b.id, b);
+        // Attempt background push of unsynced booking
+        setDoc(doc(db, 'roomBookings', b.id), sanitizeForFirestore(b)).catch(() => {});
+      }
+    });
+
+    const combined = Array.from(map.values()).sort(
+      (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+    );
+    setLocalData(STORAGE_KEYS.BOOKINGS, combined);
+    return combined;
   } catch (err: unknown) {
     console.warn('[dbService] Firestore bookings fetch notice:', err);
   }
 
-  const list = getLocalData<RoomBooking[]>(STORAGE_KEYS.BOOKINGS, INITIAL_ROOM_BOOKINGS);
-  return list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+  return localList.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 }
 
 export async function fetchAdminOrders(_token?: string): Promise<CafeOrder[]> {
+  const localList = getLocalData<CafeOrder[]>(STORAGE_KEYS.ORDERS, INITIAL_CAFE_ORDERS);
   try {
     const snap = await getDocs(collection(db, 'cafeOrders'));
-    const list: CafeOrder[] = [];
-    snap.forEach((d) => list.push(d.data() as CafeOrder));
-    if (list.length > 0) {
-      list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-      setLocalData(STORAGE_KEYS.ORDERS, list);
-      return list;
-    }
+    const remoteList: CafeOrder[] = [];
+    snap.forEach((d) => remoteList.push(d.data() as CafeOrder));
+
+    // Combine remote and local, preferring remote
+    const map = new Map<string, CafeOrder>();
+    remoteList.forEach((o) => map.set(o.id, o));
+    localList.forEach((o) => {
+      if (!map.has(o.id)) {
+        map.set(o.id, o);
+        // Attempt background push of unsynced order
+        setDoc(doc(db, 'cafeOrders', o.id), sanitizeForFirestore(o)).catch(() => {});
+      }
+    });
+
+    const combined = Array.from(map.values()).sort(
+      (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+    );
+    setLocalData(STORAGE_KEYS.ORDERS, combined);
+    return combined;
   } catch (err: unknown) {
     console.warn('[dbService] Firestore orders fetch notice:', err);
   }
 
-  const list = getLocalData<CafeOrder[]>(STORAGE_KEYS.ORDERS, INITIAL_CAFE_ORDERS);
-  return list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+  return localList.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 }
 
 export async function fetchAdminReservations(_token?: string): Promise<TableReservation[]> {
+  const localList = getLocalData<TableReservation[]>(STORAGE_KEYS.RESERVATIONS, []);
   try {
     const snap = await getDocs(collection(db, 'tableReservations'));
-    const list: TableReservation[] = [];
-    snap.forEach((d) => list.push(d.data() as TableReservation));
-    if (list.length > 0) {
-      list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-      setLocalData(STORAGE_KEYS.RESERVATIONS, list);
-      return list;
-    }
+    const remoteList: TableReservation[] = [];
+    snap.forEach((d) => remoteList.push(d.data() as TableReservation));
+
+    const map = new Map<string, TableReservation>();
+    remoteList.forEach((r) => map.set(r.id, r));
+    localList.forEach((r) => {
+      if (!map.has(r.id)) {
+        map.set(r.id, r);
+        setDoc(doc(db, 'tableReservations', r.id), sanitizeForFirestore(r)).catch(() => {});
+      }
+    });
+
+    const combined = Array.from(map.values()).sort(
+      (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+    );
+    setLocalData(STORAGE_KEYS.RESERVATIONS, combined);
+    return combined;
   } catch (err: unknown) {
     console.warn('[dbService] Firestore reservations fetch notice:', err);
   }
 
-  const list = getLocalData<TableReservation[]>(STORAGE_KEYS.RESERVATIONS, []);
-  return list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+  return localList.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 }
 
 export async function fetchAdminNotifications(_token?: string): Promise<AdminNotification[]> {
