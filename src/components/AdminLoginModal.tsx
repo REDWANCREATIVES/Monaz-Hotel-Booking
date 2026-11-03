@@ -94,44 +94,46 @@ export default function AdminLoginModal({
 
     // 2. Try Backend API endpoint if configured
     let backendSuccess = false;
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
+    if (API_BASE) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
 
-      const response = await fetch(`${API_BASE}/api/admin/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: cleanUser, password: cleanPassword }),
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
+        const response = await fetch(`${API_BASE}/api/admin/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: cleanUser, password: cleanPassword }),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
 
-      const contentType = response.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const data = await response.json();
-        if (response.ok && data?.token && data?.admin) {
-          const session = {
-            token: data.token,
-            username: data.admin.username,
-            email: data.admin.email,
-            role: data.admin.role,
-            expiresAt: data.expiresAt
-          };
-          sessionStorage.setItem('monaz_admin_session', JSON.stringify(session));
-          onLoginSuccess(session);
-          onClose();
-          setIsLoading(false);
-          backendSuccess = true;
-          return;
-        } else if (response.status === 429) {
-          setIsLockedOut(true);
-          setErrorMessage(data.error || 'Too many failed attempts. Account temporarily locked for 15 minutes.');
-          setIsLoading(false);
-          return;
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const data = await response.json();
+          if (response.ok && data?.token && data?.admin) {
+            const session = {
+              token: data.token,
+              username: data.admin.username,
+              email: data.admin.email,
+              role: data.admin.role,
+              expiresAt: data.expiresAt
+            };
+            sessionStorage.setItem('monaz_admin_session', JSON.stringify(session));
+            onLoginSuccess(session);
+            onClose();
+            setIsLoading(false);
+            backendSuccess = true;
+            return;
+          } else if (response.status === 429) {
+            setIsLockedOut(true);
+            setErrorMessage(data.error || 'Too many failed attempts. Account temporarily locked for 15 minutes.');
+            setIsLoading(false);
+            return;
+          }
         }
+      } catch {
+        // Backend not running (e.g. static host like Netlify); fall through safely
       }
-    } catch {
-      // Backend not running (e.g. static host like Netlify); fall through safely
     }
 
     if (backendSuccess) return;

@@ -43,6 +43,22 @@ export function readFileAsBase64(file: File): Promise<string> {
   });
 }
 
+// Clean objects recursively to remove undefined values which cause Firestore setDoc/updateDoc to throw
+export function sanitizeForFirestore<T extends Record<string, any>>(obj: T): Record<string, any> {
+  const result: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value === undefined) {
+      continue;
+    }
+    if (value !== null && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
+      result[key] = sanitizeForFirestore(value);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
 // ---------------------------------------------------------------------------
 // LOCAL STORAGE CACHE HELPERS (For offline resilience and instant UI updates)
 // ---------------------------------------------------------------------------
@@ -174,10 +190,9 @@ export async function createRoomBooking(input: CreateBookingInput): Promise<Room
   // 1. Write directly to Firestore
   try {
     const docRef = doc(db, 'roomBookings', bookingId);
-    await setDoc(docRef, newBooking);
+    await setDoc(docRef, sanitizeForFirestore(newBooking));
   } catch (err: unknown) {
-    console.warn('[dbService] Firestore write notice for room booking:', err);
-    // Don't throw if network is slow; cache will preserve it
+    console.error('[dbService] Firestore write failed for room booking:', err);
   }
 
   // 2. Cache locally for instant UI update
@@ -278,9 +293,9 @@ export async function createCafeOrder(input: CreateOrderInput): Promise<CafeOrde
   // 1. Write to Firestore
   try {
     const docRef = doc(db, 'cafeOrders', orderId);
-    await setDoc(docRef, newOrder);
+    await setDoc(docRef, sanitizeForFirestore(newOrder));
   } catch (err: unknown) {
-    console.warn('[dbService] Firestore write notice for cafe order:', err);
+    console.error('[dbService] Firestore write failed for cafe order:', err);
   }
 
   // 2. Cache locally
@@ -360,9 +375,9 @@ export async function createTableReservation(input: CreateTableReservationInput)
   // 1. Write to Firestore
   try {
     const docRef = doc(db, 'tableReservations', resId);
-    await setDoc(docRef, newReservation);
+    await setDoc(docRef, sanitizeForFirestore(newReservation));
   } catch (err: unknown) {
-    console.warn('[dbService] Firestore write notice for table reservation:', err);
+    console.error('[dbService] Firestore write failed for table reservation:', err);
   }
 
   // 2. Cache locally
@@ -425,9 +440,9 @@ export async function dispatchAdminNotification(input: DispatchNotificationInput
 
   try {
     const notifRef = doc(db, 'adminNotifications', notifId);
-    await setDoc(notifRef, notificationRecord);
+    await setDoc(notifRef, sanitizeForFirestore(notificationRecord));
   } catch (err: unknown) {
-    console.warn('[dbService] Firestore write notice for admin notification:', err);
+    console.error('[dbService] Firestore write failed for admin notification:', err);
   }
 
   const currentNotifs = getLocalData<AdminNotification[]>(STORAGE_KEYS.NOTIFICATIONS, []);
@@ -483,7 +498,7 @@ export async function updateBookingStatusInDb(
 ): Promise<void> {
   try {
     const docRef = doc(db, 'roomBookings', bookingId);
-    await updateDoc(docRef, { status: newStatus, updatedAt: new Date().toISOString() });
+    await updateDoc(docRef, sanitizeForFirestore({ status: newStatus, updatedAt: new Date().toISOString() }));
   } catch (err: unknown) {
     handleFirestoreError(err, OperationType.UPDATE, `roomBookings/${bookingId}`);
   }
@@ -501,7 +516,7 @@ export async function updateOrderStatusInDb(
 ): Promise<void> {
   try {
     const docRef = doc(db, 'cafeOrders', orderId);
-    await updateDoc(docRef, { status: newStatus, updatedAt: new Date().toISOString() });
+    await updateDoc(docRef, sanitizeForFirestore({ status: newStatus, updatedAt: new Date().toISOString() }));
   } catch (err: unknown) {
     handleFirestoreError(err, OperationType.UPDATE, `cafeOrders/${orderId}`);
   }
@@ -519,7 +534,7 @@ export async function updateReservationStatusInDb(
 ): Promise<void> {
   try {
     const docRef = doc(db, 'tableReservations', reservationId);
-    await updateDoc(docRef, { status: newStatus, updatedAt: new Date().toISOString() });
+    await updateDoc(docRef, sanitizeForFirestore({ status: newStatus, updatedAt: new Date().toISOString() }));
   } catch (err: unknown) {
     handleFirestoreError(err, OperationType.UPDATE, `tableReservations/${reservationId}`);
   }
@@ -912,12 +927,12 @@ export async function updateAdminBookingPayment(
   // 1. Update Firestore
   try {
     const docRef = doc(db, 'roomBookings', bookingId);
-    await updateDoc(docRef, {
+    await updateDoc(docRef, sanitizeForFirestore({
       paymentStatus,
       paymentProof: updatedProof,
       status: updatedBooking.status,
       updatedAt: updatedBooking.updatedAt
-    });
+    }));
   } catch (err: unknown) {
     handleFirestoreError(err, OperationType.UPDATE, `roomBookings/${bookingId}`);
   }

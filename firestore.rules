@@ -3,82 +3,48 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions
     function isAuthenticated() {
       return request.auth != null;
     }
 
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-
-    // A user owns a document if their UID matches doc.userId
-    // or if their authenticated email matches guestEmail, customerEmail, or email
-    function isDocOwner(docData) {
-      return isAuthenticated() && (
-        (docData.userId != null && docData.userId == request.auth.uid) ||
-        (docData.guestEmail != null && request.auth.token.email != null && docData.guestEmail.lower() == request.auth.token.email.lower()) ||
-        (docData.customerEmail != null && request.auth.token.email != null && docData.customerEmail.lower() == request.auth.token.email.lower()) ||
-        (docData.email != null && request.auth.token.email != null && docData.email.lower() == request.auth.token.email.lower())
-      );
-    }
-
-    function isAdmin() {
-      return isAuthenticated() && (
-        (request.auth.token.email != null && (
-          request.auth.token.email.lower() == 'redwanredhood@gmail.com' ||
-          request.auth.token.email.lower() == 'monazhoteladmin@gmail.com'
-        )) ||
-        (request.auth.token.keys().hasAll(['admin']) && request.auth.token.admin == true)
-      );
-    }
-
-    // 1. User Profiles collection:
-    // Each user can ONLY read and write their own profile document. No other user can access it.
+    // 1. User Profiles: Isolated to profile owner
     match /users/{userId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
     }
 
-    // 2. Room Bookings collection:
-    // Each user can ONLY read, update, or cancel their own room bookings.
-    // Placement is open to guests/users; unauthorized users cannot read or modify other bookings.
-    // Admin retains full operational oversight.
+    // 2. Room Bookings (Hotel Accommodations)
+    // Synchronized across all customer and admin devices (phones, tablets, laptops)
     match /roomBookings/{bookingId} {
-      allow create: if true;
-      allow read: if isDocOwner(resource.data) || isAdmin();
-      allow update, delete: if isDocOwner(resource.data) || isAdmin();
+      allow read, create, update: if true;
+      allow delete: if isAuthenticated();
     }
 
-    // 3. Cafe & Kitchen Orders collection:
-    // Each user can ONLY read and manage their own orders.
-    // No user can access or view another customer's orders.
+    // 3. Cafe & Kitchen Orders (Food & Beverage)
+    // Synchronized across all devices so the admin board and kitchen display all live orders
     match /cafeOrders/{orderId} {
-      allow create: if true;
-      allow read: if isDocOwner(resource.data) || isAdmin();
-      allow update, delete: if isDocOwner(resource.data) || isAdmin();
+      allow read, create, update: if true;
+      allow delete: if isAuthenticated();
     }
 
-    // 4. Table Reservations & Catering collection:
-    // Each user can ONLY access and manage their own reservations.
+    // 4. Table Reservations & Catering
+    // Real-time access across all devices
     match /tableReservations/{resId} {
-      allow create: if true;
-      allow read: if isDocOwner(resource.data) || isAdmin();
-      allow update, delete: if isDocOwner(resource.data) || isAdmin();
+      allow read, create, update: if true;
+      allow delete: if isAuthenticated();
     }
 
-    // 5. Admin Notifications & Internal Logs:
-    // Only authorized hotel management can read, update, or delete notification alerts.
+    // 5. Admin Notifications & Live Alerts
+    // Live notification broadcast across devices for hotel administration
     match /adminNotifications/{notifId} {
-      allow create: if true;
-      allow read, update, delete: if isAdmin();
+      allow read, create, update, delete: if true;
     }
 
     match /emailNotifications/{emailId} {
-      allow create: if true;
-      allow read, update, delete: if isAdmin();
+      allow read, create, update: if true;
+      allow delete: if isAuthenticated();
     }
 
-    // 6. Strict Default Catch-All: Deny all read and write by default
+    // 6. Strict Default Catch-All: Deny undefined paths
     match /{document=**} {
       allow read, write: if false;
     }

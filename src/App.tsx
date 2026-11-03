@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Sparkles, Check, Heart, ShoppingBag, X, Hotel, ShieldCheck } from 'lucide-react';
 import { onAuthStateChanged, signOut, User as FirebaseUser } from 'firebase/auth';
@@ -232,21 +232,25 @@ export default function App() {
         sessionStorage.removeItem('monaz_admin_session');
         return;
       }
-      fetch(`${API_BASE}/api/admin/session`, {
-        headers: { Authorization: `Bearer ${adminSession.token}` }
-      })
-        .then((res) => {
-          const contentType = res.headers.get('content-type') || '';
-          if (contentType.includes('application/json') && !res.ok) {
-            setAdminSession(null);
-            sessionStorage.removeItem('monaz_admin_session');
-            return;
-          }
-          loadAdminData();
+      if (API_BASE) {
+        fetch(`${API_BASE}/api/admin/session`, {
+          headers: { Authorization: `Bearer ${adminSession.token}` }
         })
-        .catch(() => {
-          loadAdminData();
-        });
+          .then((res) => {
+            const contentType = res.headers.get('content-type') || '';
+            if (contentType.includes('application/json') && !res.ok) {
+              setAdminSession(null);
+              sessionStorage.removeItem('monaz_admin_session');
+              return;
+            }
+            loadAdminData();
+          })
+          .catch(() => {
+            loadAdminData();
+          });
+      } else {
+        loadAdminData();
+      }
     }
   }, []);
 
@@ -259,6 +263,29 @@ export default function App() {
     }
   }, [adminSession?.token]);
 
+  const initialMountRef = useRef(true);
+  const knownBookingIdsRef = useRef<Set<string>>(new Set());
+  const knownOrderIdsRef = useRef<Set<string>>(new Set());
+
+  const playNotificationChime = () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15); // A5
+      gain.gain.setValueAtTime(0.18, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.4);
+    } catch {}
+  };
+
   // Real-time Firestore subscriptions for bookings, orders, table reservations and notifications outbox
   useEffect(() => {
     testConnection().then(() => {
@@ -268,12 +295,30 @@ export default function App() {
     const unsubBookings = subscribeToRoomBookings((liveBookings) => {
       if (liveBookings && liveBookings.length > 0) {
         setRoomBookings(liveBookings);
+        if (!initialMountRef.current && adminSession?.token) {
+          const freshItems = liveBookings.filter((b) => !knownBookingIdsRef.current.has(b.id));
+          if (freshItems.length > 0) {
+            const newest = freshItems[0];
+            playNotificationChime();
+            showToast(`🔔 New Reservation: #${newest.id} (${newest.roomName})`, 'admin');
+          }
+        }
+        knownBookingIdsRef.current = new Set(liveBookings.map((b) => b.id));
       }
     });
 
     const unsubOrders = subscribeToCafeOrders((liveOrders) => {
       if (liveOrders && liveOrders.length > 0) {
         setCafeOrders(liveOrders);
+        if (!initialMountRef.current && adminSession?.token) {
+          const freshOrders = liveOrders.filter((o) => !knownOrderIdsRef.current.has(o.id));
+          if (freshOrders.length > 0) {
+            const newest = freshOrders[0];
+            playNotificationChime();
+            showToast(`🔔 New Food Order: #${newest.id} (${newest.totalAmount} ETB)`, 'admin');
+          }
+        }
+        knownOrderIdsRef.current = new Set(liveOrders.map((o) => o.id));
       }
     });
 
@@ -285,13 +330,18 @@ export default function App() {
       setAdminNotifications(liveNotifs);
     });
 
+    const timer = setTimeout(() => {
+      initialMountRef.current = false;
+    }, 2000);
+
     return () => {
+      clearTimeout(timer);
       unsubBookings();
       unsubOrders();
       unsubTable();
       unsubNotifs();
     };
-  }, []);
+  }, [adminSession?.token]);
 
   useEffect(() => {
     localStorage.setItem('monaz_menu_items', JSON.stringify(menuItems));
@@ -427,9 +477,9 @@ export default function App() {
   };
 
   const handleLogout = async () => {
-    if (adminSession?.token) {
+    if (API_BASE && adminSession?.token) {
       try {
-        await fetch('/api/admin/logout', {
+        await fetch(`${API_BASE}/api/admin/logout`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${adminSession.token}` }
         });

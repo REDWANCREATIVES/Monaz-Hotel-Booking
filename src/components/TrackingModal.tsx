@@ -19,7 +19,7 @@ import {
   Receipt
 } from 'lucide-react';
 import { ServiceTrackingInfo, PaymentStatus } from '../types';
-import { fetchPublicTracking } from '../services/dbService';
+import { fetchPublicTracking, API_BASE } from '../services/dbService';
 
 interface TrackingModalProps {
   isOpen: boolean;
@@ -90,31 +90,33 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({
   };
 
   const handleFuzzySearch = async (queryText: string, isSilent = false) => {
-    try {
-      const res = await fetch('/api/track', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: queryText })
-      });
+    if (API_BASE) {
+      try {
+        const res = await fetch(`${API_BASE}/api/track`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: queryText })
+        });
 
-      const contentType = res.headers.get('content-type') || '';
-      if (res.ok && contentType.includes('application/json')) {
-        const data = await res.json();
-        if (Array.isArray(data.results) && data.results.length > 0) {
-          if (data.results.length === 1) {
-            setActiveTracking(data.results[0]);
-            setSearchResults([]);
-            localStorage.setItem('monaz_last_tracking_id', data.results[0].id);
-          } else {
-            setSearchResults(data.results);
-            setActiveTracking(null);
+        const contentType = res.headers.get('content-type') || '';
+        if (res.ok && contentType.includes('application/json')) {
+          const data = await res.json();
+          if (Array.isArray(data.results) && data.results.length > 0) {
+            if (data.results.length === 1) {
+              setActiveTracking(data.results[0]);
+              setSearchResults([]);
+              localStorage.setItem('monaz_last_tracking_id', data.results[0].id);
+            } else {
+              setSearchResults(data.results);
+              setActiveTracking(null);
+            }
+            setLastUpdated(new Date());
+            return;
           }
-          setLastUpdated(new Date());
-          return;
         }
+      } catch {
+        // Backend not running; fall through to local lookup
       }
-    } catch {
-      // Backend not running; fall through to local lookup
     }
 
     // Direct fallback lookup by reference ID, phone, or name from client cache
